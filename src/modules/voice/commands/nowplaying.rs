@@ -1,6 +1,7 @@
 use crate::{Context, error::AppError, modules::voice::setup};
 use poise::serenity_prelude as serenity;
 
+/// Show the current track and how far through it is
 #[poise::command(slash_command, guild_only, rename = "nowplaying")]
 pub async fn nowplaying(ctx: Context<'_>) -> Result<(), AppError> {
     let call = setup::current_call(ctx).await?;

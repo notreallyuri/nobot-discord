@@ -1,5 +1,6 @@
 use crate::{Context, error::AppError, modules::voice::setup};
 
+/// Empty the queue but keep playing the current track
 #[poise::command(slash_command, guild_only)]
 pub async fn clear(ctx: Context<'_>) -> Result<(), AppError> {
     setup::require_dj(ctx).await?;

@@ -11,6 +11,7 @@ use crate::{
 };
 use poise::serenity_prelude as serenity;
 
+/// Show a member's profile card
 #[poise::command(slash_command, guild_only)]
 pub async fn profile(
     ctx: Context<'_>,

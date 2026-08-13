@@ -5,11 +5,13 @@ use crate::{
 };
 use poise::serenity_prelude as serenity;
 
+/// Set or clear your profile card background
 #[poise::command(slash_command, guild_only, subcommands("set", "clear"))]
 pub async fn background(_: Context<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Upload an image to use behind your profile card
 #[poise::command(slash_command)]
 pub async fn set(
     ctx: Context<'_>,
@@ -40,6 +42,7 @@ pub async fn set(
     Ok(())
 }
 
+/// Remove your profile card background
 #[poise::command(slash_command)]
 pub async fn clear(ctx: Context<'_>) -> Result<(), AppError> {
     let had_one = store::clear_background(&ctx.data().db, ctx.author().id.get() as i64).await?;

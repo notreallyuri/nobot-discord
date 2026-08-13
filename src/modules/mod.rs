@@ -89,3 +89,98 @@ mod tests {
         assert_eq!(registered, expected);
     }
 }
+
+#[cfg(test)]
+mod descriptions {
+    use super::*;
+
+    fn walk(command: &crate::Command, path: &str, missing: &mut Vec<String>) {
+        let name = if path.is_empty() {
+            command.name.clone()
+        } else {
+            format!("{path} {}", command.name)
+        };
+
+        match command.description.as_deref() {
+            Some(text) if !text.trim().is_empty() => {}
+            _ => missing.push(name.clone()),
+        }
+
+        for sub in &command.subcommands {
+            walk(sub, &name, missing);
+        }
+    }
+
+    #[test]
+    fn every_command_describes_itself() {
+        let mut missing = Vec::new();
+
+        for command in all().iter().flat_map(|module| module.commands()) {
+            walk(&command, "", &mut missing);
+        }
+
+        assert!(
+            missing.is_empty(),
+            "these would show a blank description in Discord: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn descriptions_fit_discords_limit() {
+        let mut offenders = Vec::new();
+
+        fn check(command: &crate::Command, offenders: &mut Vec<String>) {
+            if let Some(text) = command.description.as_deref()
+                && text.chars().count() > 100
+            {
+                offenders.push(format!("{}: {} chars", command.name, text.chars().count()));
+            }
+
+            for sub in &command.subcommands {
+                check(sub, offenders);
+            }
+        }
+
+        for command in all().iter().flat_map(|module| module.commands()) {
+            check(&command, &mut offenders);
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "over Discord's 100-char cap: {offenders:?}"
+        );
+    }
+
+    #[test]
+    fn every_parameter_describes_itself() {
+        let mut missing = Vec::new();
+
+        fn check(command: &crate::Command, path: &str, missing: &mut Vec<String>) {
+            let name = if path.is_empty() {
+                command.name.clone()
+            } else {
+                format!("{path} {}", command.name)
+            };
+
+            for parameter in &command.parameters {
+                match parameter.description.as_deref() {
+                    Some(text) if !text.trim().is_empty() => {}
+                    _ => missing.push(format!("{name} → {}", parameter.name)),
+                }
+            }
+
+            for sub in &command.subcommands {
+                check(sub, &name, missing);
+            }
+        }
+
+        for command in all().iter().flat_map(|module| module.commands()) {
+            check(&command, "", &mut missing);
+        }
+
+        assert!(
+            missing.is_empty(),
+            "parameters with no description: {missing:?}"
+        );
+    }
+}

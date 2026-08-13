@@ -5,6 +5,7 @@ use crate::{
 };
 use poise::serenity_prelude as serenity;
 
+/// Set or clear your profile accent colour
 #[poise::command(
     slash_command,
     guild_only,
@@ -15,6 +16,7 @@ pub async fn color(_: Context<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Pick the accent colour used on your profile card
 #[poise::command(slash_command)]
 pub async fn set(
     ctx: Context<'_>,
@@ -50,6 +52,7 @@ pub async fn set(
     Ok(())
 }
 
+/// Go back to the default accent colour
 #[poise::command(slash_command)]
 pub async fn clear(ctx: Context<'_>) -> Result<(), AppError> {
     let had_one = store::clear_accent(&ctx.data().db, ctx.author().id.get() as i64).await?;

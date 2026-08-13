@@ -47,6 +47,7 @@ async fn suggestions<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<String> {
     choices
 }
 
+/// Play a track, or add it to the queue
 #[poise::command(slash_command, guild_only)]
 pub async fn play(
     ctx: Context<'_>,

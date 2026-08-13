@@ -11,6 +11,7 @@ use std::time::Duration;
 
 const BROWSE_FOR: Duration = Duration::from_secs(300);
 
+/// Show the lyrics for a song, or for what's playing
 #[poise::command(slash_command, guild_only)]
 pub async fn lyrics(
     ctx: Context<'_>,

@@ -5,6 +5,7 @@ use crate::{
 };
 use poise::serenity_prelude as serenity;
 
+/// Change how the bot behaves in this server
 #[poise::command(
     slash_command,
     guild_only,
@@ -128,6 +129,7 @@ async fn save(ctx: Context<'_>, setting: Setting, note: &str) -> Result<(), AppE
     Ok(())
 }
 
+/// Show every setting for this server
 #[poise::command(slash_command)]
 pub async fn show(ctx: Context<'_>) -> Result<(), AppError> {
     let config = ctx.data().guild_config(guild_of(ctx)?).await;
@@ -142,6 +144,7 @@ pub async fn show(ctx: Context<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Turn XP and coin earning on or off
 #[poise::command(slash_command)]
 pub async fn economy(
     ctx: Context<'_>,
@@ -156,6 +159,7 @@ pub async fn economy(
     save(ctx, Setting::Economy(Some(enabled)), note).await
 }
 
+/// Rename the currency or give it an emoji
 #[poise::command(slash_command)]
 pub async fn currency(
     ctx: Context<'_>,
@@ -189,6 +193,7 @@ pub async fn currency(
     Ok(())
 }
 
+/// Change how much XP a message earns and how often
 #[poise::command(slash_command)]
 pub async fn xp(
     ctx: Context<'_>,
@@ -224,6 +229,7 @@ pub async fn xp(
     Ok(())
 }
 
+/// Restrict playback control to a role
 #[poise::command(slash_command)]
 pub async fn dj(
     ctx: Context<'_>,
@@ -237,6 +243,7 @@ pub async fn dj(
     .await
 }
 
+/// Keep the bot in voice, or change how long it waits before leaving
 #[poise::command(slash_command)]
 pub async fn voice(
     ctx: Context<'_>,
@@ -286,6 +293,7 @@ pub async fn voice(
 
 const PLACEHOLDERS: &str = "Placeholders: `{user}`, `{mention}`, `{server}`, `{count}`.";
 
+/// Announce new members in a channel
 #[poise::command(slash_command)]
 pub async fn welcome(
     ctx: Context<'_>,
@@ -334,6 +342,7 @@ pub async fn welcome(
     Ok(())
 }
 
+/// Announce members who leave in a channel
 #[poise::command(slash_command)]
 pub async fn farewell(
     ctx: Context<'_>,
@@ -396,6 +405,7 @@ pub enum Resettable {
     FarewellMessage,
 }
 
+/// Put one setting back on the bot default
 #[poise::command(slash_command)]
 pub async fn reset(
     ctx: Context<'_>,

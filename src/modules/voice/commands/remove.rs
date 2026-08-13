@@ -4,6 +4,7 @@ use crate::{
     modules::voice::setup::{self, TrackMeta},
 };
 
+/// Remove one track from the queue
 #[poise::command(slash_command, guild_only)]
 pub async fn remove(
     ctx: Context<'_>,

@@ -32,6 +32,7 @@ async fn current_track(ctx: Context<'_>) -> Result<Current, AppError> {
     })
 }
 
+/// Pause the current track
 #[poise::command(slash_command, guild_only)]
 pub async fn pause(ctx: Context<'_>) -> Result<(), AppError> {
     setup::require_dj(ctx).await?;
@@ -59,6 +60,7 @@ pub async fn pause(ctx: Context<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Resume a paused track
 #[poise::command(slash_command, guild_only)]
 pub async fn resume(ctx: Context<'_>) -> Result<(), AppError> {
     setup::require_dj(ctx).await?;

@@ -1,6 +1,7 @@
 use crate::{Context, error::AppError, modules::leveling::store};
 use poise::serenity_prelude as serenity;
 
+/// Show this server's top members by XP
 #[poise::command(slash_command, guild_only)]
 pub async fn leaderboard(ctx: Context<'_>) -> Result<(), AppError> {
     let guild_id = ctx

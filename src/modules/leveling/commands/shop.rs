@@ -11,6 +11,7 @@ fn guild_of(ctx: Context<'_>) -> Result<i64, AppError> {
         .ok_or_else(|| AppError::Message("This command can only be used in a server.".into()))
 }
 
+/// Browse badges you can buy
 #[poise::command(slash_command, guild_only)]
 pub async fn shop(ctx: Context<'_>) -> Result<(), AppError> {
     let user_id = ctx.author().id.get() as i64;
@@ -61,6 +62,7 @@ async fn purchasable_names<'a>(
         .filter(move |name| name.to_lowercase().contains(&partial.to_lowercase()))
 }
 
+/// Buy a badge with your coins
 #[poise::command(slash_command, guild_only)]
 pub async fn buy(
     ctx: Context<'_>,

@@ -14,6 +14,7 @@ fn shift<T>(queue: &mut VecDeque<T>, from: usize, to: usize) -> bool {
     true
 }
 
+/// Move a queued track to a different position
 #[poise::command(slash_command, guild_only, rename = "move")]
 pub async fn move_track(
     ctx: Context<'_>,

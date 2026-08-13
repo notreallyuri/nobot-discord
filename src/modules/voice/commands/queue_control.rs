@@ -10,6 +10,7 @@ fn guild_of(ctx: Context<'_>) -> Result<i64, AppError> {
         .ok_or_else(|| AppError::Message("This command can only be used in a server.".into()))
 }
 
+/// Shuffle everything behind the current track
 #[poise::command(slash_command, guild_only)]
 pub async fn shuffle(ctx: Context<'_>) -> Result<(), AppError> {
     setup::require_dj(ctx).await?;
@@ -30,6 +31,7 @@ pub async fn shuffle(ctx: Context<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Repeat the current track, the whole queue, or nothing
 #[poise::command(slash_command, guild_only)]
 pub async fn repeat(
     ctx: Context<'_>,

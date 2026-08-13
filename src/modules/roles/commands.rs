@@ -2,6 +2,7 @@ use super::{menu, store};
 use crate::{Context, error::AppError};
 use poise::serenity_prelude as serenity;
 
+/// Build menus members can use to pick their own roles
 #[poise::command(
     slash_command,
     guild_only,
@@ -57,6 +58,7 @@ async fn republish(ctx: Context<'_>, record: &store::Menu) -> Result<(), AppErro
     Ok(())
 }
 
+/// Post a new role menu to a channel
 #[poise::command(slash_command)]
 pub async fn create(
     ctx: Context<'_>,
@@ -123,6 +125,7 @@ pub async fn create(
     Ok(())
 }
 
+/// Add a role to a menu
 #[poise::command(slash_command)]
 pub async fn add(
     ctx: Context<'_>,
@@ -185,6 +188,7 @@ pub async fn add(
     Ok(())
 }
 
+/// Take a role off a menu
 #[poise::command(slash_command)]
 pub async fn remove(
     ctx: Context<'_>,
@@ -213,6 +217,7 @@ pub async fn remove(
     Ok(())
 }
 
+/// List this server's role menus
 #[poise::command(slash_command)]
 pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
     let guild_id = guild_of(ctx)?.get() as i64;
@@ -248,6 +253,7 @@ pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Delete a role menu and its message
 #[poise::command(slash_command)]
 pub async fn delete(
     ctx: Context<'_>,
@@ -282,6 +288,7 @@ pub async fn delete(
     Ok(())
 }
 
+/// Choose roles everyone gets when they join
 #[poise::command(
     slash_command,
     guild_only,
@@ -318,6 +325,7 @@ async fn save_autoroles(ctx: Context<'_>, roles: Vec<i64>, note: String) -> Resu
     Ok(())
 }
 
+/// Give a role to everyone who joins
 #[poise::command(slash_command, rename = "add")]
 pub async fn autorole_add(
     ctx: Context<'_>,
@@ -370,6 +378,7 @@ pub async fn autorole_add(
     .await
 }
 
+/// Stop giving out a role on join
 #[poise::command(slash_command, rename = "remove")]
 pub async fn autorole_remove(
     ctx: Context<'_>,
@@ -402,6 +411,7 @@ pub async fn autorole_remove(
     .await
 }
 
+/// List the roles given out on join
 #[poise::command(slash_command, rename = "list")]
 pub async fn autorole_list(ctx: Context<'_>) -> Result<(), AppError> {
     let guild_id = guild_of(ctx)?.get() as i64;

@@ -1,5 +1,6 @@
 use crate::{Context, error::AppError, modules::voice::setup};
 
+/// Skip to the next track in the queue
 #[poise::command(slash_command, guild_only)]
 pub async fn skip(ctx: Context<'_>) -> Result<(), AppError> {
     setup::require_dj(ctx).await?;

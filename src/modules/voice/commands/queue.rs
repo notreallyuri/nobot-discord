@@ -3,6 +3,7 @@ use poise::serenity_prelude as serenity;
 
 const PAGE: usize = 10;
 
+/// See what's playing and what's coming up
 #[poise::command(slash_command, guild_only)]
 pub async fn queue(ctx: Context<'_>) -> Result<(), AppError> {
     let call = setup::current_call(ctx).await?;

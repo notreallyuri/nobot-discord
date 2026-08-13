@@ -4,6 +4,7 @@ use crate::{
     modules::voice::{idle, setup},
 };
 
+/// Leave the voice channel
 #[poise::command(slash_command, guild_only)]
 pub async fn leave(ctx: Context<'_>) -> Result<(), AppError> {
     setup::require_dj(ctx).await?;

@@ -5,6 +5,7 @@ use crate::{
 };
 use poise::serenity_prelude as serenity;
 
+/// See which achievements you've unlocked
 #[poise::command(slash_command, guild_only)]
 pub async fn achievements(ctx: Context<'_>) -> Result<(), AppError> {
     let user_id = ctx.author().id.get() as i64;

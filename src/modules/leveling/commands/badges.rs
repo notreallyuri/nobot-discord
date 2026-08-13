@@ -5,11 +5,13 @@ use crate::{
 };
 use poise::serenity_prelude as serenity;
 
+/// View and choose which badges show on your profile
 #[poise::command(slash_command, guild_only, subcommands("list", "equip", "unequip"))]
 pub async fn badges(_: Context<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// List the badges you own
 #[poise::command(slash_command)]
 pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
     let user_id = ctx.author().id.get() as i64;
@@ -70,6 +72,7 @@ async fn owned_names<'a>(ctx: Context<'a>, partial: &'a str) -> Vec<String> {
         .collect()
 }
 
+/// Show a badge on your profile card
 #[poise::command(slash_command)]
 pub async fn equip(
     ctx: Context<'_>,
@@ -80,6 +83,7 @@ pub async fn equip(
     change(ctx, &badge, true).await
 }
 
+/// Hide a badge from your profile card
 #[poise::command(slash_command)]
 pub async fn unequip(
     ctx: Context<'_>,
