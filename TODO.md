@@ -38,6 +38,13 @@ feature itself ships. Items with no nested line need no schema change.
     anyone can control playback, which is the previous behaviour.
   - Server managers bypass it, and so does anyone who is the only listener in
     the channel — otherwise a DJ-less server locks itself out of its own bot.
+- [x] More queue control — `/shuffle`, `/repeat off|track|queue`
+  - Track repeat uses songbird's `enable_loop`, so the queue behind it is
+    untouched and resumes the moment you switch modes.
+  - Queue repeat re-enqueues a track when it ends. It only fires on a natural
+    `PlayMode::End`, never on a stop, so `/skip`, `/stop` and `/clear` behave
+    normally instead of refilling the queue.
+  - Both are behind the DJ role.
 - [ ] 24/7 mode with auto-reconnect and idle timeout
   - [ ] db — `guild_config.stay_connected`, `guild_config.idle_timeout_secs`
 - [ ] Saved/reloadable playlists per user

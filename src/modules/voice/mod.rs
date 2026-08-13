@@ -5,6 +5,7 @@ pub mod announce;
 pub mod commands;
 pub mod idle;
 pub mod lyrics;
+pub mod repeat;
 pub mod setup;
 pub mod sources;
 pub mod spotify;
@@ -24,6 +25,8 @@ impl Module for VoiceModule {
             commands::pause(),
             commands::resume(),
             commands::skip(),
+            commands::shuffle(),
+            commands::repeat(),
             commands::stop(),
             commands::queue(),
             commands::nowplaying(),

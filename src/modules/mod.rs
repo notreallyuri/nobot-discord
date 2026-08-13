@@ -63,8 +63,10 @@ mod tests {
             "profile",
             "queue",
             "remove",
+            "repeat",
             "resume",
             "shop",
+            "shuffle",
             "skip",
             "stop",
         ];

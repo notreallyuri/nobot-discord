@@ -802,6 +802,7 @@ dependencies = [
  "dotenvy",
  "image",
  "poise",
+ "rand 0.9.4",
  "reqwest",
  "resvg",
  "serde",

@@ -1,10 +1,21 @@
-use crate::modules::voice::setup::{self, TrackMeta};
+use crate::modules::voice::{
+    repeat,
+    setup::{self, TrackMeta},
+    sources::Retrying,
+    ytdlp,
+};
 use poise::serenity_prelude as serenity;
+use songbird::{
+    Call,
+    input::{Input, YoutubeDl},
+    tracks::Track,
+};
 use songbird::{
     Event, EventContext, EventHandler, TrackEvent,
     tracks::{PlayMode, TrackHandle},
 };
 use std::sync::Arc;
+use tokio::sync::Mutex as AsyncMutex;
 
 pub fn attach(
     handle: &TrackHandle,
@@ -37,6 +48,66 @@ pub fn attach(
         if let Err(e) = handle.add_event(Event::Track(event), handler) {
             tracing::warn!(?e, ?event, "failed to attach track notifier");
         }
+    }
+}
+
+pub struct Recycle {
+    pub call: Arc<AsyncMutex<Call>>,
+    pub http: reqwest::Client,
+    pub modes: repeat::Modes,
+    pub guild_id: i64,
+    pub meta: Arc<TrackMeta>,
+}
+
+pub fn attach_repeat(handle: &TrackHandle, recycle: Recycle) {
+    if let Err(e) = handle.add_event(Event::Track(TrackEvent::End), recycle) {
+        tracing::warn!(?e, "failed to attach the repeat handler");
+    }
+}
+
+fn rebuild(http: reqwest::Client, meta: &TrackMeta) -> Input {
+    let source = match meta.url.as_deref().filter(|url| url.starts_with("http")) {
+        Some(url) => YoutubeDl::new_ytdl_like(ytdlp::program(), http, url.to_string()),
+        None => YoutubeDl::new_search_ytdl_like(ytdlp::program(), http, meta.title.clone()),
+    };
+
+    Input::Lazy(Box::new(Retrying::new(source)))
+}
+
+#[async_trait::async_trait]
+impl EventHandler for Recycle {
+    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        if repeat::get(&self.modes, self.guild_id) != repeat::Mode::Queue {
+            return None;
+        }
+
+        let EventContext::Track(states) = ctx else {
+            return None;
+        };
+
+        if !matches!(states.first()?.0.playing, PlayMode::End) {
+            return None;
+        }
+
+        let input = rebuild(self.http.clone(), &self.meta);
+        let mut call = self.call.lock().await;
+        let handle = call
+            .enqueue(Track::new_with_data(input, self.meta.clone()))
+            .await;
+
+        attach_repeat(
+            &handle,
+            Recycle {
+                call: self.call.clone(),
+                http: self.http.clone(),
+                modes: self.modes.clone(),
+                guild_id: self.guild_id,
+                meta: self.meta.clone(),
+            },
+        );
+
+        tracing::debug!(track = %self.meta.title, "recycled for queue repeat");
+        None
     }
 }
 

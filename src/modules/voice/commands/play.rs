@@ -64,7 +64,8 @@ pub async fn play(
             single(
                 ctx,
                 &call,
-                YoutubeDl::new_ytdl_like(ytdlp::program(), http, url),
+                YoutubeDl::new_ytdl_like(ytdlp::program(), http.clone(), url),
+                http,
             )
             .await?
         }
@@ -72,7 +73,8 @@ pub async fn play(
             single(
                 ctx,
                 &call,
-                YoutubeDl::new_search_ytdl_like(ytdlp::program(), http, terms),
+                YoutubeDl::new_search_ytdl_like(ytdlp::program(), http.clone(), terms),
+                http,
             )
             .await?
         }
@@ -105,6 +107,7 @@ async fn single(
     ctx: Context<'_>,
     call: &Arc<Mutex<Call>>,
     mut source: YoutubeDl<'static>,
+    http: reqwest::Client,
 ) -> Result<serenity::CreateEmbed, AppError> {
     let aux = source.aux_metadata().await.map_err(|e| {
         tracing::warn!(?e, "yt-dlp lookup failed");
@@ -121,7 +124,7 @@ async fn single(
     });
 
     let input = Input::Lazy(Box::new(Retrying::new(source)));
-    let position = enqueue(ctx, call, input, meta.clone()).await;
+    let position = enqueue(ctx, call, input, meta.clone(), http).await;
 
     let footer = if position <= 1 {
         "Starting now".to_string()
@@ -176,7 +179,7 @@ async fn spotify(
             http.clone(),
             track,
         ))));
-        let at = enqueue(ctx, call, input, meta.clone()).await;
+        let at = enqueue(ctx, call, input, meta.clone(), http.clone()).await;
 
         if first.is_none() {
             first = Some(meta);
@@ -232,9 +235,11 @@ async fn enqueue(
     call: &Arc<Mutex<Call>>,
     input: Input,
     meta: Arc<TrackMeta>,
+    http: reqwest::Client,
 ) -> usize {
-    let mut call = call.lock().await;
-    let handle = call
+    let call = call.clone();
+    let mut guard = call.lock().await;
+    let handle = guard
         .enqueue(Track::new_with_data(input, meta.clone()))
         .await;
 
@@ -242,10 +247,23 @@ async fn enqueue(
         &handle,
         ctx.serenity_context().http.clone(),
         ctx.channel_id(),
-        meta,
+        meta.clone(),
     );
 
-    call.queue().len()
+    if let Some(guild_id) = ctx.guild_id() {
+        announce::attach_repeat(
+            &handle,
+            announce::Recycle {
+                call: call.clone(),
+                http,
+                modes: ctx.data().repeat.clone(),
+                guild_id: guild_id.get() as i64,
+                meta,
+            },
+        );
+    }
+
+    guard.queue().len()
 }
 
 fn describe(meta: &TrackMeta) -> String {

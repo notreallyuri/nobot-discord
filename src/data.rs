@@ -2,7 +2,7 @@ use crate::{
     config::Config,
     guild_config,
     module::Module,
-    modules::voice::{idle::Sessions, spotify::SpotifyClient},
+    modules::voice::{idle::Sessions, repeat, spotify::SpotifyClient},
 };
 use dashmap::DashMap;
 use sqlx::PgPool;
@@ -17,6 +17,7 @@ pub struct Data {
     pub spotify: Option<Arc<SpotifyClient>>,
     pub voice_sessions: Sessions,
     pub guild_config: guild_config::Cache,
+    pub repeat: repeat::Modes,
 }
 
 impl Data {

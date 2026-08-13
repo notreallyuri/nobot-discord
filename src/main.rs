@@ -92,6 +92,7 @@ async fn main() -> Result<(), AppError> {
                     spotify,
                     voice_sessions: Arc::new(DashMap::new()),
                     guild_config: Arc::new(DashMap::new()),
+                    repeat: Arc::new(DashMap::new()),
                 };
 
                 for module in modules.iter() {
