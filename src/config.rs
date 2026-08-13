@@ -17,6 +17,7 @@ pub struct Config {
     pub guild_ids: Vec<serenity::GuildId>,
     pub spotify: Option<SpotifyCredentials>,
     pub playlist_limit: usize,
+    pub member_intent: bool,
 }
 
 struct Redacted;
@@ -56,6 +57,7 @@ impl fmt::Debug for Config {
             .field("guild_ids", &self.guild_ids)
             .field("spotify", &self.spotify)
             .field("playlist_limit", &self.playlist_limit)
+            .field("member_intent", &self.member_intent)
             .finish()
     }
 }
@@ -84,8 +86,18 @@ impl Config {
             guild_ids: parse_guild_ids()?,
             spotify,
             playlist_limit: parse_limit()?,
+            member_intent: flag("MEMBER_INTENT"),
         })
     }
+}
+
+fn flag(key: &str) -> bool {
+    optional(key).is_some_and(|value| {
+        matches!(
+            value.to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
 }
 
 fn required(key: &str) -> Result<String, AppError> {
@@ -203,6 +215,7 @@ mod tests {
                 client_secret: "a_very_secret_value".to_string(),
             }),
             playlist_limit: 100,
+            member_intent: false,
         }
     }
 

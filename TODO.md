@@ -73,8 +73,16 @@ feature itself ships. Items with no nested line need no schema change.
 
 ## 🛡️ Moderation & Utility (optional expansion)
 
-- [ ] Welcome/leave messages with auto-generated rank-0 card
-  - [ ] db — `guild_config.welcome_channel_id`, `guild_config.welcome_template`
+- [x] Welcome/leave messages with a generated card — `/config welcome`,
+      `/config farewell`
+  - [x] db — `0011_greetings`: welcome/farewell channel, message and card toggle
+  - **Needs `MEMBER_INTENT=true` in `.env` and "Server Members Intent" enabled
+    in the Discord developer portal.** Without it the bot stays on
+    non-privileged intents and no member events arrive, so the settings save
+    but nothing fires. The intent is opt-in precisely so an unset portal
+    toggle cannot stop the bot connecting.
+  - Templates take `{user}`, `{mention}`, `{server}`, `{count}`; separate
+    channels mean welcomes and farewells can run independently.
 - [ ] Logging (message edits/deletes, joins/leaves)
   - [ ] db — `guild_config.log_channel_id`
 - [ ] Auto-moderation (spam/link filtering) — **scope not defined yet**

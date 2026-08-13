@@ -11,6 +11,7 @@ pub mod accent;
 pub mod background;
 pub mod levelup;
 pub mod profile;
+pub mod welcome;
 
 const FIGTREE: &[u8] = include_bytes!("../../../../assets/fonts/Figtree-Regular.ttf");
 const FIGTREE_BOLD: &[u8] = include_bytes!("../../../../assets/fonts/Figtree-Bold.ttf");

@@ -31,7 +31,11 @@ async fn main() -> Result<(), AppError> {
     let config = Arc::new(config::Config::from_env()?);
     let token = config.token.clone();
 
-    let intents = serenity::GatewayIntents::non_privileged();
+    let mut intents = serenity::GatewayIntents::non_privileged();
+    if config.member_intent {
+        intents |= serenity::GatewayIntents::GUILD_MEMBERS;
+        tracing::info!("member events enabled (needs Server Members Intent in the portal)");
+    }
 
     let db = PgPoolOptions::new()
         .max_connections(5)

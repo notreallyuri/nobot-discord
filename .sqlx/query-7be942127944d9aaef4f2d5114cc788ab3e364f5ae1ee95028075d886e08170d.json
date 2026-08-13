@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO guild_config (guild_id, farewell_message) VALUES ($1, $2)\n                 ON CONFLICT (guild_id) DO UPDATE\n                 SET farewell_message = $2, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7be942127944d9aaef4f2d5114cc788ab3e364f5ae1ee95028075d886e08170d"
+}

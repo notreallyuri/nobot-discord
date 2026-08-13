@@ -8,7 +8,9 @@ use poise::serenity_prelude as serenity;
 #[poise::command(
     slash_command,
     guild_only,
-    subcommands("show", "economy", "currency", "xp", "dj", "voice", "reset"),
+    subcommands(
+        "show", "economy", "currency", "xp", "dj", "voice", "welcome", "farewell", "reset"
+    ),
     default_member_permissions = "MANAGE_GUILD",
     required_permissions = "MANAGE_GUILD"
 )]
@@ -70,6 +72,30 @@ fn describe(config: &GuildConfig) -> serenity::CreateEmbed {
                     config.idle_timeout().as_secs()
                 )
             },
+            true,
+        )
+        .field(
+            "Welcome",
+            config.welcome_channel_id.map_or_else(
+                || "off".to_string(),
+                |id| {
+                    format!(
+                        "<#{id}>{}",
+                        if config.shows_welcome_card() {
+                            " + card"
+                        } else {
+                            ""
+                        }
+                    )
+                },
+            ),
+            true,
+        )
+        .field(
+            "Farewell",
+            config
+                .farewell_channel_id
+                .map_or_else(|| "off".to_string(), |id| format!("<#{id}>")),
             true,
         )
         .field(
@@ -258,6 +284,90 @@ pub async fn voice(
     Ok(())
 }
 
+const PLACEHOLDERS: &str = "Placeholders: `{user}`, `{mention}`, `{server}`, `{count}`.";
+
+#[poise::command(slash_command)]
+pub async fn welcome(
+    ctx: Context<'_>,
+    #[description = "Where to post welcomes"] channel: Option<serenity::GuildChannel>,
+    #[description = "What to say"] message: Option<String>,
+    #[description = "Attach a welcome card"] card: Option<bool>,
+) -> Result<(), AppError> {
+    if channel.is_none() && message.is_none() && card.is_none() {
+        return Err(AppError::Message(format!(
+            "Give a channel, a message, or a card toggle. {PLACEHOLDERS} \
+             Turn welcomes off with `/config reset`."
+        )));
+    }
+
+    if let Some(channel) = channel {
+        save(
+            ctx,
+            Setting::WelcomeChannel(Some(channel.id.get() as i64)),
+            &format!("Welcoming new members in {channel}."),
+        )
+        .await?;
+    }
+
+    if let Some(message) = message {
+        save(
+            ctx,
+            Setting::WelcomeMessage(Some(message.trim().to_string())),
+            &format!("Welcome message updated. {PLACEHOLDERS}"),
+        )
+        .await?;
+    }
+
+    if let Some(card) = card {
+        save(
+            ctx,
+            Setting::WelcomeCard(Some(card)),
+            if card {
+                "Welcomes will include a card."
+            } else {
+                "Welcomes will be text only."
+            },
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+#[poise::command(slash_command)]
+pub async fn farewell(
+    ctx: Context<'_>,
+    #[description = "Where to post farewells"] channel: Option<serenity::GuildChannel>,
+    #[description = "What to say"] message: Option<String>,
+) -> Result<(), AppError> {
+    if channel.is_none() && message.is_none() {
+        return Err(AppError::Message(format!(
+            "Give a channel, a message, or both. {PLACEHOLDERS} \
+             Turn farewells off with `/config reset`."
+        )));
+    }
+
+    if let Some(channel) = channel {
+        save(
+            ctx,
+            Setting::FarewellChannel(Some(channel.id.get() as i64)),
+            &format!("Announcing departures in {channel}."),
+        )
+        .await?;
+    }
+
+    if let Some(message) = message {
+        save(
+            ctx,
+            Setting::FarewellMessage(Some(message.trim().to_string())),
+            &format!("Farewell message updated. {PLACEHOLDERS}"),
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, poise::ChoiceParameter)]
 pub enum Resettable {
     #[name = "economy"]
@@ -276,6 +386,14 @@ pub enum Resettable {
     StayConnected,
     #[name = "idle timeout"]
     IdleTimeout,
+    #[name = "welcomes"]
+    Welcome,
+    #[name = "welcome message"]
+    WelcomeMessage,
+    #[name = "farewells"]
+    Farewell,
+    #[name = "farewell message"]
+    FarewellMessage,
 }
 
 #[poise::command(slash_command)]
@@ -292,6 +410,10 @@ pub async fn reset(
         Resettable::DjRole => Setting::DjRole(None),
         Resettable::StayConnected => Setting::StayConnected(None),
         Resettable::IdleTimeout => Setting::IdleTimeout(None),
+        Resettable::Welcome => Setting::WelcomeChannel(None),
+        Resettable::WelcomeMessage => Setting::WelcomeMessage(None),
+        Resettable::Farewell => Setting::FarewellChannel(None),
+        Resettable::FarewellMessage => Setting::FarewellMessage(None),
     };
 
     save(ctx, cleared, "Back on the bot default.").await

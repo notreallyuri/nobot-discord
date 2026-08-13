@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,\n                xp_cooldown_secs, dj_role_id, stay_connected, idle_timeout_secs,\n                voice_channel_id, voice_text_channel_id\n         FROM guild_config WHERE guild_id = $1",
+  "query": "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,\n                xp_cooldown_secs, dj_role_id, stay_connected, idle_timeout_secs,\n                voice_channel_id, voice_text_channel_id, welcome_channel_id,\n                welcome_message, welcome_card, farewell_channel_id, farewell_message\n         FROM guild_config WHERE guild_id = $1",
   "describe": {
     "columns": [
       {
@@ -112,6 +112,61 @@
             "name": "voice_text_channel_id"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "welcome_channel_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "welcome_channel_id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "welcome_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "welcome_message"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "welcome_card",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "welcome_card"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "farewell_channel_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "farewell_channel_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "farewell_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "farewell_message"
+          }
+        }
       }
     ],
     "parameters": {
@@ -129,8 +184,13 @@
       true,
       true,
       true,
+      true,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "7389df6e8977ffc7fb18aebd8ccc9a1034dbf5a2cccc5a8dd4e19a68c2947e7d"
+  "hash": "17a48016f863b2ef0ba3bc7091071b07dd4ef60d6c97930f9c5cab137b4fc37a"
 }

@@ -26,6 +26,11 @@ pub struct GuildConfig {
     pub idle_timeout_secs: Option<i32>,
     pub voice_channel_id: Option<i64>,
     pub voice_text_channel_id: Option<i64>,
+    pub welcome_channel_id: Option<i64>,
+    pub welcome_message: Option<String>,
+    pub welcome_card: Option<bool>,
+    pub farewell_channel_id: Option<i64>,
+    pub farewell_message: Option<String>,
 }
 
 impl GuildConfig {
@@ -67,6 +72,10 @@ impl GuildConfig {
         })
     }
 
+    pub fn shows_welcome_card(&self) -> bool {
+        self.welcome_card.unwrap_or(true)
+    }
+
     pub fn is_default(&self) -> bool {
         self == &Self::default()
     }
@@ -82,6 +91,11 @@ pub enum Setting {
     StayConnected(Option<bool>),
     IdleTimeout(Option<i32>),
     VoiceChannels(Option<i64>, Option<i64>),
+    WelcomeChannel(Option<i64>),
+    WelcomeMessage(Option<String>),
+    WelcomeCard(Option<bool>),
+    FarewellChannel(Option<i64>),
+    FarewellMessage(Option<String>),
 }
 
 impl Setting {
@@ -96,6 +110,15 @@ impl Setting {
         };
 
         match self {
+            Self::WelcomeMessage(Some(text)) | Self::FarewellMessage(Some(text))
+                if text.trim().is_empty()
+                    || text.chars().count() > crate::modules::greetings::template::MAX_LEN =>
+            {
+                Err(AppError::Message(format!(
+                    "A greeting must be between 1 and {} characters.",
+                    crate::modules::greetings::template::MAX_LEN
+                )))
+            }
             Self::CurrencyName(value) => label(value, "currency name"),
             Self::CurrencyEmoji(value) => label(value, "currency emoji"),
             Self::XpPerMessage(Some(amount)) if !(1..=MAX_XP_PER_MESSAGE).contains(amount) => {
@@ -127,7 +150,8 @@ async fn fetch(db: &PgPool, guild_id: i64) -> Result<GuildConfig, AppError> {
         GuildConfig,
         "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,
                 xp_cooldown_secs, dj_role_id, stay_connected, idle_timeout_secs,
-                voice_channel_id, voice_text_channel_id
+                voice_channel_id, voice_text_channel_id, welcome_channel_id,
+                welcome_message, welcome_card, farewell_channel_id, farewell_message
          FROM guild_config WHERE guild_id = $1",
         guild_id
     )
@@ -198,6 +222,61 @@ pub async fn apply(
                 "INSERT INTO guild_config (guild_id, xp_per_message) VALUES ($1, $2)
                  ON CONFLICT (guild_id) DO UPDATE
                  SET xp_per_message = $2, updated_at = now()",
+                guild_id,
+                value,
+            )
+            .execute(db)
+            .await?;
+        }
+        Setting::WelcomeChannel(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, welcome_channel_id) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET welcome_channel_id = $2, updated_at = now()",
+                guild_id,
+                value,
+            )
+            .execute(db)
+            .await?;
+        }
+        Setting::WelcomeMessage(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, welcome_message) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET welcome_message = $2, updated_at = now()",
+                guild_id,
+                value,
+            )
+            .execute(db)
+            .await?;
+        }
+        Setting::WelcomeCard(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, welcome_card) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET welcome_card = $2, updated_at = now()",
+                guild_id,
+                value,
+            )
+            .execute(db)
+            .await?;
+        }
+        Setting::FarewellChannel(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, farewell_channel_id) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET farewell_channel_id = $2, updated_at = now()",
+                guild_id,
+                value,
+            )
+            .execute(db)
+            .await?;
+        }
+        Setting::FarewellMessage(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, farewell_message) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET farewell_message = $2, updated_at = now()",
                 guild_id,
                 value,
             )
@@ -285,6 +364,7 @@ mod tests {
         assert_eq!(config.xp_cooldown(), xp::XP_COOLDOWN);
         assert_eq!(config.dj_role(), None);
         assert!(!config.stays_connected());
+        assert!(config.shows_welcome_card());
         assert_eq!(config.idle_timeout(), DEFAULT_IDLE_TIMEOUT);
     }
 
@@ -314,6 +394,11 @@ mod tests {
             idle_timeout_secs: Some(600),
             voice_channel_id: Some(99),
             voice_text_channel_id: Some(100),
+            welcome_channel_id: Some(7),
+            welcome_message: Some("hi {user}".into()),
+            welcome_card: Some(false),
+            farewell_channel_id: None,
+            farewell_message: None,
         };
 
         assert!(!config.is_default());
@@ -324,6 +409,7 @@ mod tests {
         assert_eq!(config.xp_cooldown(), Duration::from_secs(120));
         assert_eq!(config.dj_role().map(|r| r.get()), Some(4242));
         assert!(config.stays_connected());
+        assert!(!config.shows_welcome_card());
         assert_eq!(config.idle_timeout(), Duration::from_secs(600));
     }
 

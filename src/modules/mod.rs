@@ -1,5 +1,6 @@
 use crate::module::Module;
 
+pub mod greetings;
 pub mod leveling;
 pub mod roles;
 pub mod voice;
@@ -9,6 +10,7 @@ pub fn all() -> Vec<Box<dyn Module>> {
         Box::new(leveling::LevelingModule),
         Box::new(voice::VoiceModule),
         Box::new(roles::RolesModule),
+        Box::new(greetings::GreetingsModule),
     ]
 }
 
@@ -52,9 +54,11 @@ mod tests {
             "config currency",
             "config dj",
             "config economy",
+            "config farewell",
             "config reset",
             "config show",
             "config voice",
+            "config welcome",
             "config xp",
             "leaderboard",
             "leave",
