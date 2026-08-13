@@ -48,6 +48,7 @@ mod tests {
             "color clear",
             "color set",
             "config currency",
+            "config dj",
             "config economy",
             "config reset",
             "config show",

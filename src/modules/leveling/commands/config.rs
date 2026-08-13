@@ -8,7 +8,7 @@ use poise::serenity_prelude as serenity;
 #[poise::command(
     slash_command,
     guild_only,
-    subcommands("show", "economy", "currency", "xp", "reset"),
+    subcommands("show", "economy", "currency", "xp", "dj", "reset"),
     default_member_permissions = "MANAGE_GUILD",
     required_permissions = "MANAGE_GUILD"
 )]
@@ -50,6 +50,14 @@ fn describe(config: &GuildConfig) -> serenity::CreateEmbed {
         .field(
             "XP per message",
             shown(config.xp_per_message.map(|xp| xp.to_string())),
+            true,
+        )
+        .field(
+            "DJ role",
+            config.dj_role().map_or_else(
+                || "anyone can control playback".to_string(),
+                |role| format!("<@&{role}>"),
+            ),
             true,
         )
         .field(
@@ -178,6 +186,19 @@ pub async fn xp(
     Ok(())
 }
 
+#[poise::command(slash_command)]
+pub async fn dj(
+    ctx: Context<'_>,
+    #[description = "Role allowed to control playback"] role: serenity::Role,
+) -> Result<(), AppError> {
+    save(
+        ctx,
+        Setting::DjRole(Some(role.id.get() as i64)),
+        &format!("Only **{}** can control playback now. Server managers and anyone listening alone are still allowed.", role.name),
+    )
+    .await
+}
+
 #[derive(Debug, poise::ChoiceParameter)]
 pub enum Resettable {
     #[name = "economy"]
@@ -190,6 +211,8 @@ pub enum Resettable {
     XpPerMessage,
     #[name = "xp cooldown"]
     XpCooldown,
+    #[name = "dj role"]
+    DjRole,
 }
 
 #[poise::command(slash_command)]
@@ -203,6 +226,7 @@ pub async fn reset(
         Resettable::CurrencyEmoji => Setting::CurrencyEmoji(None),
         Resettable::XpPerMessage => Setting::XpPerMessage(None),
         Resettable::XpCooldown => Setting::XpCooldown(None),
+        Resettable::DjRole => Setting::DjRole(None),
     };
 
     save(ctx, cleared, "Back on the bot default.").await

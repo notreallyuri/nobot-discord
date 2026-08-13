@@ -11,6 +11,8 @@ pub async fn remove(
     #[min = 1]
     position: u32,
 ) -> Result<(), AppError> {
+    setup::require_dj(ctx).await?;
+
     let call = setup::current_call(ctx).await?;
     let index = position as usize;
 

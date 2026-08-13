@@ -32,8 +32,12 @@ feature itself ships. Items with no nested line need no schema change.
 
 ## 🎵 Music
 
-- [ ] DJ role/permissions for skip/stop/queue control
-  - [ ] db — `guild_config.dj_role_id`
+- [x] DJ role/permissions for skip/stop/queue control — `/config dj`
+  - [x] db — `0008_dj_role`, `guild_config.dj_role_id`
+  - Gates skip, stop, pause, resume, clear, remove, move, leave. Unset means
+    anyone can control playback, which is the previous behaviour.
+  - Server managers bypass it, and so does anyone who is the only listener in
+    the channel — otherwise a DJ-less server locks itself out of its own bot.
 - [ ] 24/7 mode with auto-reconnect and idle timeout
   - [ ] db — `guild_config.stay_connected`, `guild_config.idle_timeout_secs`
 - [ ] Saved/reloadable playlists per user

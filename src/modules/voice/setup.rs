@@ -29,6 +29,61 @@ pub async fn http_client(ctx: Context<'_>) -> Result<reqwest::Client, AppError> 
         .ok_or_else(|| AppError::Message("HTTP client not initialised.".into()))
 }
 
+fn listeners_besides(ctx: Context<'_>, channel: serenity::ChannelId) -> usize {
+    ctx.guild().map_or(0, |guild| {
+        guild
+            .voice_states
+            .values()
+            .filter(|state| state.user_id != ctx.framework().bot_id)
+            .filter(|state| state.user_id != ctx.author().id)
+            .filter(|state| state.channel_id == Some(channel))
+            .count()
+    })
+}
+
+pub async fn require_dj(ctx: Context<'_>) -> Result<(), AppError> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or_else(|| AppError::Message("This command can only be used in a server.".into()))?;
+
+    let config = ctx.data().guild_config(guild_id.get() as i64).await;
+
+    let Some(dj) = config.dj_role() else {
+        return Ok(());
+    };
+
+    let member = ctx
+        .author_member()
+        .await
+        .ok_or_else(|| AppError::Message("Couldn't check your roles.".into()))?;
+
+    if member.roles.contains(&dj) {
+        return Ok(());
+    }
+
+    let privileged = ctx
+        .author_member()
+        .await
+        .and_then(|member| member.permissions)
+        .is_some_and(|permissions| {
+            permissions.manage_guild() || permissions.administrator() || permissions.move_members()
+        });
+
+    if privileged {
+        return Ok(());
+    }
+
+    if let Some(channel) = author_voice_channel(ctx)
+        && listeners_besides(ctx, channel) == 0
+    {
+        return Ok(());
+    }
+
+    Err(AppError::Message(format!(
+        "Only <@&{dj}> can control playback here — unless you're the only one listening."
+    )))
+}
+
 pub fn author_voice_channel(ctx: Context<'_>) -> Option<serenity::ChannelId> {
     let guild = ctx.guild()?;
     guild

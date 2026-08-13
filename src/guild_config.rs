@@ -1,5 +1,6 @@
 use crate::{error::AppError, modules::leveling::setup::xp};
 use dashmap::DashMap;
+use poise::serenity_prelude as serenity;
 use sqlx::PgPool;
 use std::{sync::Arc, time::Duration};
 
@@ -17,6 +18,7 @@ pub struct GuildConfig {
     pub currency_emoji: Option<String>,
     pub xp_per_message: Option<i64>,
     pub xp_cooldown_secs: Option<i32>,
+    pub dj_role_id: Option<i64>,
 }
 
 impl GuildConfig {
@@ -42,6 +44,12 @@ impl GuildConfig {
         })
     }
 
+    pub fn dj_role(&self) -> Option<serenity::RoleId> {
+        self.dj_role_id
+            .filter(|id| *id > 0)
+            .map(|id| serenity::RoleId::new(id as u64))
+    }
+
     pub fn is_default(&self) -> bool {
         self == &Self::default()
     }
@@ -53,6 +61,7 @@ pub enum Setting {
     CurrencyEmoji(Option<String>),
     XpPerMessage(Option<i64>),
     XpCooldown(Option<i32>),
+    DjRole(Option<i64>),
 }
 
 impl Setting {
@@ -89,7 +98,8 @@ impl Setting {
 async fn fetch(db: &PgPool, guild_id: i64) -> Result<GuildConfig, AppError> {
     let row = sqlx::query_as!(
         GuildConfig,
-        "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message, xp_cooldown_secs
+        "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,
+                xp_cooldown_secs, dj_role_id
          FROM guild_config WHERE guild_id = $1",
         guild_id
     )
@@ -166,6 +176,17 @@ pub async fn apply(
             .execute(db)
             .await?;
         }
+        Setting::DjRole(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, dj_role_id) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET dj_role_id = $2, updated_at = now()",
+                guild_id,
+                value,
+            )
+            .execute(db)
+            .await?;
+        }
         Setting::XpCooldown(value) => {
             sqlx::query!(
                 "INSERT INTO guild_config (guild_id, xp_cooldown_secs) VALUES ($1, $2)
@@ -199,6 +220,7 @@ mod tests {
         assert_eq!(config.emoji(), None);
         assert_eq!(config.xp_award(), xp::XP_PER_MESSAGE);
         assert_eq!(config.xp_cooldown(), xp::XP_COOLDOWN);
+        assert_eq!(config.dj_role(), None);
     }
 
     #[test]
@@ -209,6 +231,7 @@ mod tests {
             currency_emoji: Some("💎".to_string()),
             xp_per_message: Some(5),
             xp_cooldown_secs: Some(120),
+            dj_role_id: Some(4242),
         };
 
         assert!(!config.is_default());
@@ -217,6 +240,7 @@ mod tests {
         assert_eq!(config.emoji(), Some("💎"));
         assert_eq!(config.xp_award(), 5);
         assert_eq!(config.xp_cooldown(), Duration::from_secs(120));
+        assert_eq!(config.dj_role().map(|r| r.get()), Some(4242));
     }
 
     #[test]

@@ -2,6 +2,8 @@ use crate::{Context, error::AppError, modules::voice::setup};
 
 #[poise::command(slash_command, guild_only)]
 pub async fn stop(ctx: Context<'_>) -> Result<(), AppError> {
+    setup::require_dj(ctx).await?;
+
     let call = setup::current_call(ctx).await?;
     let cleared = {
         let call = call.lock().await;

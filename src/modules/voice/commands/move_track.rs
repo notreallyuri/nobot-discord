@@ -24,6 +24,8 @@ pub async fn move_track(
     #[min = 1]
     to: u32,
 ) -> Result<(), AppError> {
+    setup::require_dj(ctx).await?;
+
     if from == to {
         return Err(AppError::Message(
             "That track is already in that position.".into(),

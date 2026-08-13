@@ -6,6 +6,8 @@ use crate::{
 
 #[poise::command(slash_command, guild_only)]
 pub async fn leave(ctx: Context<'_>) -> Result<(), AppError> {
+    setup::require_dj(ctx).await?;
+
     let guild_id = ctx
         .guild_id()
         .ok_or_else(|| AppError::Message("This command can only be used in a server.".into()))?;
