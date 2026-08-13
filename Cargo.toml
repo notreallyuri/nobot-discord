@@ -1,0 +1,55 @@
+[package]
+name = "dis-ru"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dotenvy = "0.15.7"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+tokio = { version = "1", features = [
+    "macros",
+    "rt-multi-thread",
+    "signal",
+    "fs",
+    "process",
+] }
+sqlx = { version = "0.9", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres", 
+    "macros",  
+    "migrate",
+    "chrono",
+] }
+
+poise = "0.6.2"
+songbird = { version = "0.6.0", features = ["builtin-queue"] }
+serenity = { version = "0.12", default-features = false, features = ["voice"] }
+# songbird depends on symphonia with default-features = false and enables no
+# formats, leaving codec choice to the downstream crate. Without this, the only
+# readers registered are DCA/Raw and every stream fails to probe.
+# Defaults cover mkv (YouTube's WebM/Opus) and ogg; the Opus *decoder* itself is
+# supplied by songbird. isomp4 + aac + mp3 cover m4a and direct-URL fallbacks.
+symphonia = { version = "0.5", features = ["isomp4", "aac", "mp3"] }
+
+dashmap = "6.2.1"
+thiserror = "2.0.18"
+# Default features would pull in native-tls/openssl alongside sqlx's rustls.
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Required to implement songbird's `Compose` trait.
+async-trait = "0.1"
+resvg = { version = "0.48", default-features = false, features = ["text", "raster-images"] }
+base64 = "0.23"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+url = "2"
+sha2 = "0.10"
+
+[dev-dependencies]
+async-trait = "0.1"

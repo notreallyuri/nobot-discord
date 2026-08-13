@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coins FROM profile WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coins",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "coins"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "69b5340e484f6d98a429b2e72c33de5f29e81039722b9cea167eff9a4f2ac3db"
+}

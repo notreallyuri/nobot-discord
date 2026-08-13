@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO guild_config (guild_id, xp_cooldown_secs) VALUES ($1, $2)\n                 ON CONFLICT (guild_id) DO UPDATE\n                 SET xp_cooldown_secs = $2, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "abea6a476910bcf780bf8e724f77f52b8dd32d87799eb75a0dae53c9a8811de4"
+}

@@ -1,0 +1,6 @@
+/target
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example

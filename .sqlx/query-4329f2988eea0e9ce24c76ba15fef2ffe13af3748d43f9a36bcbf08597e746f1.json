@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profile (user_id, coins, backfilled_at)\n         VALUES ($1, $2::bigint + $3::bigint, now())\n         ON CONFLICT (user_id) DO UPDATE\n         SET coins = GREATEST(profile.coins, $2::bigint) + $3::bigint,\n             backfilled_at = now(),\n             updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4329f2988eea0e9ce24c76ba15fef2ffe13af3748d43f9a36bcbf08597e746f1"
+}

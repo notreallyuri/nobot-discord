@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE profile SET background = NULL, background_blur = NULL, updated_at = now()\n         WHERE user_id = $1 AND background IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fb9a05e05d293b606a0e2d6168cb764696264ab432e23cbc0cc6f8540c5de1d9"
+}

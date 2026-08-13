@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: db
+    environment:
+        POSTGRES_USER: postgres
+        POSTGRES_DB: dis_ru
+        POSTGRES_PASSWORD: super_secret_password
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:

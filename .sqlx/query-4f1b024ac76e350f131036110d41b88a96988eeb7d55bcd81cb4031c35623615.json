@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n               u.user_id                          AS \"user_id!\",\n               u.experience                       AS \"experience!\",\n               COALESCE((\n                   SELECT max(g.experience) FROM guild_member g WHERE g.user_id = u.user_id\n               ), 0)                              AS \"best_guild_experience!\"\n           FROM users u\n           LEFT JOIN profile p ON p.user_id = u.user_id\n           WHERE p.user_id IS NULL OR p.backfilled_at IS NULL\n           ORDER BY u.user_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "experience!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "experience"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "best_guild_experience!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "4f1b024ac76e350f131036110d41b88a96988eeb7d55bcd81cb4031c35623615"
+}

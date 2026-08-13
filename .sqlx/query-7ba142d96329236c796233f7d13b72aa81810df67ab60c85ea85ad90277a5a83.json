@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT badge_id FROM user_badge\n         WHERE user_id = $1 AND equipped ORDER BY acquired_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "badge_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_badge",
+            "name": "badge_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7ba142d96329236c796233f7d13b72aa81810df67ab60c85ea85ad90277a5a83"
+}

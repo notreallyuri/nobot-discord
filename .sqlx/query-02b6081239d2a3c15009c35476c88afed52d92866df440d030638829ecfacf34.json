@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message, xp_cooldown_secs\n         FROM guild_config WHERE guild_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "economy_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "economy_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "currency_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "currency_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "currency_emoji",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "currency_emoji"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "xp_per_message",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "xp_per_message"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "xp_cooldown_secs",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "xp_cooldown_secs"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "02b6081239d2a3c15009c35476c88afed52d92866df440d030638829ecfacf34"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coins FROM profile WHERE user_id = $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coins",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "coins"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9419da09c867cb7c7eb6b5e0bb140516a400638921e6eab2c8789f606488644b"
+}

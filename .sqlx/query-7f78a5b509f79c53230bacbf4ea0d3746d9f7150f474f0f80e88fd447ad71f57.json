@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH me AS (\n               SELECT COALESCE(\n                   (SELECT experience FROM guild_member WHERE guild_id = $1 AND user_id = $2),\n                   0\n               ) AS xp\n           )\n           SELECT\n               me.xp AS \"experience!\",\n               (SELECT COUNT(*) + 1 FROM guild_member\n                 WHERE guild_id = $1 AND experience > me.xp) AS \"rank!\"\n           FROM me",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "experience!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "rank!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "7f78a5b509f79c53230bacbf4ea0d3746d9f7150f474f0f80e88fd447ad71f57"
+}
