@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM role_menu_option WHERE menu_id = $1 AND role_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "efbf28aea08540766be69970a259696302a0d9425f0aef8e48b09ca8b53f9280"
+}

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT role_id, label, description FROM role_menu_option\n         WHERE menu_id = $1 ORDER BY position, role_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "role_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "role_menu_option",
+            "name": "role_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "label",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "role_menu_option",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "role_menu_option",
+            "name": "description"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "73756bae34dab326948bec7030217bb64834c2c0886c038da1924e22e629c21a"
+}

@@ -1,12 +1,14 @@
 use crate::module::Module;
 
 pub mod leveling;
+pub mod roles;
 pub mod voice;
 
 pub fn all() -> Vec<Box<dyn Module>> {
     vec![
         Box::new(leveling::LevelingModule),
         Box::new(voice::VoiceModule),
+        Box::new(roles::RolesModule),
     ]
 }
 
@@ -66,6 +68,11 @@ mod tests {
             "remove",
             "repeat",
             "resume",
+            "rolemenu add",
+            "rolemenu create",
+            "rolemenu delete",
+            "rolemenu list",
+            "rolemenu remove",
             "shop",
             "shuffle",
             "skip",

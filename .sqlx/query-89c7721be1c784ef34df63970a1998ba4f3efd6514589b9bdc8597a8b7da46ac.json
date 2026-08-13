@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO role_menu_option (menu_id, role_id, label, description, position)\n         VALUES ($1, $2, $3, $4, $5)\n         ON CONFLICT (menu_id, role_id)\n         DO UPDATE SET label = $3, description = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "89c7721be1c784ef34df63970a1998ba4f3efd6514589b9bdc8597a8b7da46ac"
+}

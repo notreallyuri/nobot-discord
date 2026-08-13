@@ -82,8 +82,13 @@ feature itself ships. Items with no nested line need no schema change.
     `guild_config` columns *and* an `automod_rule` table. Schema stays unwritten
     until the rule model is decided (what can be matched, what actions exist,
     how exemptions work).
-- [ ] Reaction roles
-  - [ ] db — new `reaction_role` table (guild, message, emoji, role)
+- [x] Self-assignable roles — `/rolemenu create · add · remove · list · delete`
+  - [x] db — `0010_role_menus`: `role_menu` + `role_menu_option`
+  - Built on an embed with a select menu rather than reactions: labels and
+    descriptions are visible, and deselecting removes the role.
+  - The menu id lives in the component's `custom_id`, so posted menus keep
+    working across restarts with no in-memory collector.
+  - Adding or removing a role edits the posted message in place.
 
 ## 💰 Economy & Profile System
 
@@ -143,7 +148,6 @@ else is independent and can land in any order.
 | next | `profile` streak columns | Login streaks |
 | next | `user_booster` | XP boosters |
 | next | `user_background` + `profile.theme` | Extra banner slots, card themes |
-| next | `reaction_role` | Reaction roles |
 | next | `transfer` ledger | Trading/gifting |
 
 Only 0007 is numbered — later numbers get assigned when written, so parallel work
