@@ -42,6 +42,9 @@ mod tests {
 
         let expected = [
             "achievements",
+            "autorole add",
+            "autorole list",
+            "autorole remove",
             "background clear",
             "background set",
             "badges equip",

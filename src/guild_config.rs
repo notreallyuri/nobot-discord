@@ -8,6 +8,7 @@ pub const DEFAULT_CURRENCY: &str = "coins";
 pub const MAX_LABEL_LEN: usize = 32;
 pub const MAX_XP_PER_MESSAGE: i64 = 10_000;
 pub const MAX_COOLDOWN_SECS: i64 = 86_400;
+pub const MAX_AUTOROLES: usize = 10;
 pub const MIN_IDLE_SECS: i64 = 10;
 pub const MAX_IDLE_SECS: i64 = 86_400;
 pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -31,6 +32,7 @@ pub struct GuildConfig {
     pub welcome_card: Option<bool>,
     pub farewell_channel_id: Option<i64>,
     pub farewell_message: Option<String>,
+    pub autorole_ids: Option<Vec<i64>>,
 }
 
 impl GuildConfig {
@@ -76,6 +78,16 @@ impl GuildConfig {
         self.welcome_card.unwrap_or(true)
     }
 
+    pub fn autoroles(&self) -> Vec<serenity::RoleId> {
+        self.autorole_ids
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .filter(|id| **id > 0)
+            .map(|id| serenity::RoleId::new(*id as u64))
+            .collect()
+    }
+
     pub fn is_default(&self) -> bool {
         self == &Self::default()
     }
@@ -96,6 +108,7 @@ pub enum Setting {
     WelcomeCard(Option<bool>),
     FarewellChannel(Option<i64>),
     FarewellMessage(Option<String>),
+    Autoroles(Option<Vec<i64>>),
 }
 
 impl Setting {
@@ -110,6 +123,9 @@ impl Setting {
         };
 
         match self {
+            Self::Autoroles(Some(roles)) if roles.len() > MAX_AUTOROLES => Err(AppError::Message(
+                format!("A server can hand out at most {MAX_AUTOROLES} roles on join."),
+            )),
             Self::WelcomeMessage(Some(text)) | Self::FarewellMessage(Some(text))
                 if text.trim().is_empty()
                     || text.chars().count() > crate::modules::greetings::template::MAX_LEN =>
@@ -151,7 +167,8 @@ async fn fetch(db: &PgPool, guild_id: i64) -> Result<GuildConfig, AppError> {
         "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,
                 xp_cooldown_secs, dj_role_id, stay_connected, idle_timeout_secs,
                 voice_channel_id, voice_text_channel_id, welcome_channel_id,
-                welcome_message, welcome_card, farewell_channel_id, farewell_message
+                welcome_message, welcome_card, farewell_channel_id, farewell_message,
+                autorole_ids
          FROM guild_config WHERE guild_id = $1",
         guild_id
     )
@@ -224,6 +241,17 @@ pub async fn apply(
                  SET xp_per_message = $2, updated_at = now()",
                 guild_id,
                 value,
+            )
+            .execute(db)
+            .await?;
+        }
+        Setting::Autoroles(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, autorole_ids) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET autorole_ids = $2, updated_at = now()",
+                guild_id,
+                value.as_deref(),
             )
             .execute(db)
             .await?;
@@ -365,6 +393,7 @@ mod tests {
         assert_eq!(config.dj_role(), None);
         assert!(!config.stays_connected());
         assert!(config.shows_welcome_card());
+        assert!(config.autoroles().is_empty());
         assert_eq!(config.idle_timeout(), DEFAULT_IDLE_TIMEOUT);
     }
 
@@ -399,6 +428,7 @@ mod tests {
             welcome_card: Some(false),
             farewell_channel_id: None,
             farewell_message: None,
+            autorole_ids: Some(vec![7, 8]),
         };
 
         assert!(!config.is_default());
@@ -410,6 +440,7 @@ mod tests {
         assert_eq!(config.dj_role().map(|r| r.get()), Some(4242));
         assert!(config.stays_connected());
         assert!(!config.shows_welcome_card());
+        assert_eq!(config.autoroles().len(), 2);
         assert_eq!(config.idle_timeout(), Duration::from_secs(600));
     }
 

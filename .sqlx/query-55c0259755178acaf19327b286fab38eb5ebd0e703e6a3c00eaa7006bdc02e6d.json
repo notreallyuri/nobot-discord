@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO guild_config (guild_id, autorole_ids) VALUES ($1, $2)\n                 ON CONFLICT (guild_id) DO UPDATE\n                 SET autorole_ids = $2, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "55c0259755178acaf19327b286fab38eb5ebd0e703e6a3c00eaa7006bdc02e6d"
+}

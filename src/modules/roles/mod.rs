@@ -17,7 +17,7 @@ impl Module for RolesModule {
     }
 
     fn commands(&self) -> Vec<crate::Command> {
-        vec![commands::rolemenu()]
+        vec![commands::rolemenu(), commands::autorole()]
     }
 
     fn handle_event<'a>(
@@ -27,6 +27,27 @@ impl Module for RolesModule {
         data: &'a Data,
     ) -> EventFuture<'a> {
         Box::pin(async move {
+            match event {
+                serenity::FullEvent::GuildMemberAddition { new_member } => {
+                    grant_on_join(ctx, data, new_member).await;
+                    return Ok(());
+                }
+                serenity::FullEvent::GuildMemberUpdate {
+                    old_if_available,
+                    new: Some(member),
+                    ..
+                } => {
+                    let was_pending = old_if_available.as_ref().is_none_or(|old| old.pending);
+
+                    if was_pending && !member.pending {
+                        grant_on_join(ctx, data, member).await;
+                    }
+
+                    return Ok(());
+                }
+                _ => {}
+            }
+
             let serenity::FullEvent::InteractionCreate {
                 interaction: serenity::Interaction::Component(press),
             } = event
@@ -45,6 +66,40 @@ impl Module for RolesModule {
 
             Ok(())
         })
+    }
+}
+
+async fn grant_on_join(ctx: &serenity::Context, data: &Data, member: &serenity::Member) {
+    if member.user.bot || member.pending {
+        return;
+    }
+
+    let guild_id = member.guild_id;
+    let wanted = data.guild_config(guild_id.get() as i64).await.autoroles();
+
+    if wanted.is_empty() {
+        return;
+    }
+
+    let ceiling = assignable_below(ctx, guild_id);
+
+    for role in wanted {
+        if member.roles.contains(&role) {
+            continue;
+        }
+
+        if ceiling.is_some_and(|highest| role_position(ctx, guild_id, role) >= highest) {
+            tracing::warn!(
+                %guild_id,
+                %role,
+                "skipping autorole: my highest role isn't above it"
+            );
+            continue;
+        }
+
+        if let Err(e) = member.add_role(&ctx.http, role).await {
+            tracing::warn!(?e, %guild_id, %role, user = %member.user.id, "couldn't apply autorole");
+        }
     }
 }
 

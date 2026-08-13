@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,\n                xp_cooldown_secs, dj_role_id, stay_connected, idle_timeout_secs,\n                voice_channel_id, voice_text_channel_id, welcome_channel_id,\n                welcome_message, welcome_card, farewell_channel_id, farewell_message\n         FROM guild_config WHERE guild_id = $1",
+  "query": "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,\n                xp_cooldown_secs, dj_role_id, stay_connected, idle_timeout_secs,\n                voice_channel_id, voice_text_channel_id, welcome_channel_id,\n                welcome_message, welcome_card, farewell_channel_id, farewell_message,\n                autorole_ids\n         FROM guild_config WHERE guild_id = $1",
   "describe": {
     "columns": [
       {
@@ -167,6 +167,17 @@
             "name": "farewell_message"
           }
         }
+      },
+      {
+        "ordinal": 15,
+        "name": "autorole_ids",
+        "type_info": "Int8Array",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "autorole_ids"
+          }
+        }
       }
     ],
     "parameters": {
@@ -189,8 +200,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "17a48016f863b2ef0ba3bc7091071b07dd4ef60d6c97930f9c5cab137b4fc37a"
+  "hash": "b91bb05031b61a526353c212ba74830124137e209d19e2cbd373798657cb4825"
 }

@@ -281,3 +281,155 @@ pub async fn delete(
 
     Ok(())
 }
+
+#[poise::command(
+    slash_command,
+    guild_only,
+    subcommands("autorole_add", "autorole_remove", "autorole_list"),
+    rename = "autorole",
+    default_member_permissions = "MANAGE_ROLES",
+    required_permissions = "MANAGE_ROLES"
+)]
+pub async fn autorole(_: Context<'_>) -> Result<(), AppError> {
+    Ok(())
+}
+
+async fn save_autoroles(ctx: Context<'_>, roles: Vec<i64>, note: String) -> Result<(), AppError> {
+    let data = ctx.data();
+    let guild_id = guild_of(ctx)?.get() as i64;
+    let value = (!roles.is_empty()).then_some(roles);
+
+    crate::guild_config::apply(
+        &data.db,
+        &data.guild_config,
+        guild_id,
+        crate::guild_config::Setting::Autoroles(value),
+    )
+    .await?;
+
+    ctx.send(
+        poise::CreateReply::default()
+            .content(note)
+            .allowed_mentions(serenity::CreateAllowedMentions::new())
+            .ephemeral(true),
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[poise::command(slash_command, rename = "add")]
+pub async fn autorole_add(
+    ctx: Context<'_>,
+    #[description = "Role to give everyone who joins"] role: serenity::Role,
+) -> Result<(), AppError> {
+    if role.managed {
+        return Err(AppError::Message(format!(
+            "**{}** is managed by an integration, so nobody can be given it.",
+            role.name
+        )));
+    }
+
+    if role.id.get() == role.guild_id.get() {
+        return Err(AppError::Message(
+            "That's the @everyone role — everyone already has it.".into(),
+        ));
+    }
+
+    let guild_id = guild_of(ctx)?.get() as i64;
+    let mut roles: Vec<i64> = ctx
+        .data()
+        .guild_config(guild_id)
+        .await
+        .autorole_ids
+        .unwrap_or_default();
+
+    let id = role.id.get() as i64;
+
+    if roles.contains(&id) {
+        return Err(AppError::Message(format!(
+            "**{}** is already handed out on join.",
+            role.name
+        )));
+    }
+
+    if roles.len() >= crate::guild_config::MAX_AUTOROLES {
+        return Err(AppError::Message(format!(
+            "That's already {} roles on join, which is the limit.",
+            crate::guild_config::MAX_AUTOROLES
+        )));
+    }
+
+    roles.push(id);
+
+    save_autoroles(
+        ctx,
+        roles,
+        format!("New members will get **{}**.", role.name),
+    )
+    .await
+}
+
+#[poise::command(slash_command, rename = "remove")]
+pub async fn autorole_remove(
+    ctx: Context<'_>,
+    #[description = "Role to stop giving out"] role: serenity::Role,
+) -> Result<(), AppError> {
+    let guild_id = guild_of(ctx)?.get() as i64;
+    let mut roles: Vec<i64> = ctx
+        .data()
+        .guild_config(guild_id)
+        .await
+        .autorole_ids
+        .unwrap_or_default();
+
+    let id = role.id.get() as i64;
+
+    if !roles.contains(&id) {
+        return Err(AppError::Message(format!(
+            "**{}** isn't handed out on join.",
+            role.name
+        )));
+    }
+
+    roles.retain(|existing| *existing != id);
+
+    save_autoroles(
+        ctx,
+        roles,
+        format!("New members will no longer get **{}**.", role.name),
+    )
+    .await
+}
+
+#[poise::command(slash_command, rename = "list")]
+pub async fn autorole_list(ctx: Context<'_>) -> Result<(), AppError> {
+    let guild_id = guild_of(ctx)?.get() as i64;
+    let roles = ctx.data().guild_config(guild_id).await.autoroles();
+
+    if roles.is_empty() {
+        return Err(AppError::Message(
+            "Nothing is handed out on join. Add one with `/autorole add`.".into(),
+        ));
+    }
+
+    let listing = roles
+        .iter()
+        .map(|role| format!("<@&{role}>"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    ctx.send(
+        poise::CreateReply::default()
+            .embed(
+                serenity::CreateEmbed::new()
+                    .title("Roles given on join")
+                    .description(listing),
+            )
+            .allowed_mentions(serenity::CreateAllowedMentions::new())
+            .ephemeral(true),
+    )
+    .await?;
+
+    Ok(())
+}

@@ -97,6 +97,11 @@ feature itself ships. Items with no nested line need no schema change.
   - The menu id lives in the component's `custom_id`, so posted menus keep
     working across restarts with no in-memory collector.
   - Adding or removing a role edits the posted message in place.
+- [x] Autorole on join — `/autorole add · remove · list`
+  - [x] db — `0012_autorole`, `guild_config.autorole_ids` as an array, capped at 10
+  - Shares the `MEMBER_INTENT` requirement with welcome messages.
+  - Members held by rules screening are handled: roles assigned while `pending`
+    do not take effect, so it also listens for the pending flag clearing.
 
 ## 💰 Economy & Profile System
 
