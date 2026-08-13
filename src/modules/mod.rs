@@ -52,6 +52,7 @@ mod tests {
             "config economy",
             "config reset",
             "config show",
+            "config voice",
             "config xp",
             "leaderboard",
             "leave",

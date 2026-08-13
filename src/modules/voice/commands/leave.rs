@@ -25,7 +25,21 @@ pub async fn leave(ctx: Context<'_>) -> Result<(), AppError> {
         .await
         .map_err(|e| AppError::Message(format!("Failed to leave: {e}")))?;
 
-    ctx.send(setup::safe_reply("Left the voice channel."))
-        .await?;
+    let data = ctx.data();
+    let guild = guild_id.get() as i64;
+
+    if data.guild_config(guild).await.stays_connected() {
+        let forget = crate::guild_config::Setting::VoiceChannels(None, None);
+        if let Err(e) =
+            crate::guild_config::apply(&data.db, &data.guild_config, guild, forget).await
+        {
+            tracing::warn!(?e, guild, "failed to forget the 24/7 voice channel");
+        }
+    }
+
+    ctx.send(setup::safe_reply(
+        "Left the voice channel. I won't rejoin on restart until you `/play` again.",
+    ))
+    .await?;
     Ok(())
 }

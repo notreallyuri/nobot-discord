@@ -149,8 +149,31 @@ pub async fn join_or_get(ctx: Context<'_>) -> Result<Arc<Mutex<Call>>, AppError>
     }
 
     idle::remember(&ctx.data().voice_sessions, guild_id, ctx.channel_id());
+    remember_for_resume(ctx, guild_id, author_channel).await;
 
     Ok(call)
+}
+
+async fn remember_for_resume(
+    ctx: Context<'_>,
+    guild_id: serenity::GuildId,
+    channel: serenity::ChannelId,
+) {
+    let data = ctx.data();
+    let guild = guild_id.get() as i64;
+
+    if !data.guild_config(guild).await.stays_connected() {
+        return;
+    }
+
+    let setting = crate::guild_config::Setting::VoiceChannels(
+        Some(channel.get() as i64),
+        Some(ctx.channel_id().get() as i64),
+    );
+
+    if let Err(e) = crate::guild_config::apply(&data.db, &data.guild_config, guild, setting).await {
+        tracing::warn!(?e, guild, "failed to remember the voice channel for 24/7");
+    }
 }
 
 pub fn safe_reply(text: impl Into<String>) -> poise::CreateReply {

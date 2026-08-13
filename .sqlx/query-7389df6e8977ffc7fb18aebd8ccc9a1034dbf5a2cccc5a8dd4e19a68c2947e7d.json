@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,\n                xp_cooldown_secs, dj_role_id\n         FROM guild_config WHERE guild_id = $1",
+  "query": "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,\n                xp_cooldown_secs, dj_role_id, stay_connected, idle_timeout_secs,\n                voice_channel_id, voice_text_channel_id\n         FROM guild_config WHERE guild_id = $1",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,50 @@
             "name": "dj_role_id"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "stay_connected",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "stay_connected"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "idle_timeout_secs",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "idle_timeout_secs"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "voice_channel_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "voice_channel_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "voice_text_channel_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "voice_text_channel_id"
+          }
+        }
       }
     ],
     "parameters": {
@@ -81,8 +125,12 @@
       true,
       true,
       true,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "55b3bfba7116ab7181e4b66dafe2fa3b03a23a06c447e6c7e938828844f42d9f"
+  "hash": "7389df6e8977ffc7fb18aebd8ccc9a1034dbf5a2cccc5a8dd4e19a68c2947e7d"
 }

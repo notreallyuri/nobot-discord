@@ -8,6 +8,9 @@ pub const DEFAULT_CURRENCY: &str = "coins";
 pub const MAX_LABEL_LEN: usize = 32;
 pub const MAX_XP_PER_MESSAGE: i64 = 10_000;
 pub const MAX_COOLDOWN_SECS: i64 = 86_400;
+pub const MIN_IDLE_SECS: i64 = 10;
+pub const MAX_IDLE_SECS: i64 = 86_400;
+pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub type Cache = Arc<DashMap<i64, GuildConfig>>;
 
@@ -19,6 +22,10 @@ pub struct GuildConfig {
     pub xp_per_message: Option<i64>,
     pub xp_cooldown_secs: Option<i32>,
     pub dj_role_id: Option<i64>,
+    pub stay_connected: Option<bool>,
+    pub idle_timeout_secs: Option<i32>,
+    pub voice_channel_id: Option<i64>,
+    pub voice_text_channel_id: Option<i64>,
 }
 
 impl GuildConfig {
@@ -50,6 +57,16 @@ impl GuildConfig {
             .map(|id| serenity::RoleId::new(id as u64))
     }
 
+    pub fn stays_connected(&self) -> bool {
+        self.stay_connected.unwrap_or(false)
+    }
+
+    pub fn idle_timeout(&self) -> Duration {
+        self.idle_timeout_secs.map_or(DEFAULT_IDLE_TIMEOUT, |secs| {
+            Duration::from_secs(secs.max(0) as u64)
+        })
+    }
+
     pub fn is_default(&self) -> bool {
         self == &Self::default()
     }
@@ -62,6 +79,9 @@ pub enum Setting {
     XpPerMessage(Option<i64>),
     XpCooldown(Option<i32>),
     DjRole(Option<i64>),
+    StayConnected(Option<bool>),
+    IdleTimeout(Option<i32>),
+    VoiceChannels(Option<i64>, Option<i64>),
 }
 
 impl Setting {
@@ -83,6 +103,13 @@ impl Setting {
                     "XP per message must be between 1 and {MAX_XP_PER_MESSAGE}."
                 )))
             }
+            Self::IdleTimeout(Some(secs))
+                if !(MIN_IDLE_SECS..=MAX_IDLE_SECS).contains(&i64::from(*secs)) =>
+            {
+                Err(AppError::Message(format!(
+                    "The idle timeout must be between {MIN_IDLE_SECS} and {MAX_IDLE_SECS} seconds."
+                )))
+            }
             Self::XpCooldown(Some(secs))
                 if !(0..=MAX_COOLDOWN_SECS).contains(&i64::from(*secs)) =>
             {
@@ -99,7 +126,8 @@ async fn fetch(db: &PgPool, guild_id: i64) -> Result<GuildConfig, AppError> {
     let row = sqlx::query_as!(
         GuildConfig,
         "SELECT economy_enabled, currency_name, currency_emoji, xp_per_message,
-                xp_cooldown_secs, dj_role_id
+                xp_cooldown_secs, dj_role_id, stay_connected, idle_timeout_secs,
+                voice_channel_id, voice_text_channel_id
          FROM guild_config WHERE guild_id = $1",
         guild_id
     )
@@ -176,6 +204,41 @@ pub async fn apply(
             .execute(db)
             .await?;
         }
+        Setting::StayConnected(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, stay_connected) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET stay_connected = $2, updated_at = now()",
+                guild_id,
+                value,
+            )
+            .execute(db)
+            .await?;
+        }
+        Setting::IdleTimeout(value) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, idle_timeout_secs) VALUES ($1, $2)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET idle_timeout_secs = $2, updated_at = now()",
+                guild_id,
+                value,
+            )
+            .execute(db)
+            .await?;
+        }
+        Setting::VoiceChannels(voice, text) => {
+            sqlx::query!(
+                "INSERT INTO guild_config (guild_id, voice_channel_id, voice_text_channel_id)
+                 VALUES ($1, $2, $3)
+                 ON CONFLICT (guild_id) DO UPDATE
+                 SET voice_channel_id = $2, voice_text_channel_id = $3, updated_at = now()",
+                guild_id,
+                voice,
+                text,
+            )
+            .execute(db)
+            .await?;
+        }
         Setting::DjRole(value) => {
             sqlx::query!(
                 "INSERT INTO guild_config (guild_id, dj_role_id) VALUES ($1, $2)
@@ -221,6 +284,21 @@ mod tests {
         assert_eq!(config.xp_award(), xp::XP_PER_MESSAGE);
         assert_eq!(config.xp_cooldown(), xp::XP_COOLDOWN);
         assert_eq!(config.dj_role(), None);
+        assert!(!config.stays_connected());
+        assert_eq!(config.idle_timeout(), DEFAULT_IDLE_TIMEOUT);
+    }
+
+    #[test]
+    fn the_idle_timeout_is_bounded() {
+        assert!(Setting::IdleTimeout(Some(5)).validate().is_err());
+        assert!(Setting::IdleTimeout(Some(0)).validate().is_err());
+        assert!(
+            Setting::IdleTimeout(Some((MAX_IDLE_SECS + 1) as i32))
+                .validate()
+                .is_err()
+        );
+        assert!(Setting::IdleTimeout(Some(60)).validate().is_ok());
+        assert!(Setting::IdleTimeout(None).validate().is_ok());
     }
 
     #[test]
@@ -232,6 +310,10 @@ mod tests {
             xp_per_message: Some(5),
             xp_cooldown_secs: Some(120),
             dj_role_id: Some(4242),
+            stay_connected: Some(true),
+            idle_timeout_secs: Some(600),
+            voice_channel_id: Some(99),
+            voice_text_channel_id: Some(100),
         };
 
         assert!(!config.is_default());
@@ -241,6 +323,8 @@ mod tests {
         assert_eq!(config.xp_award(), 5);
         assert_eq!(config.xp_cooldown(), Duration::from_secs(120));
         assert_eq!(config.dj_role().map(|r| r.get()), Some(4242));
+        assert!(config.stays_connected());
+        assert_eq!(config.idle_timeout(), Duration::from_secs(600));
     }
 
     #[test]
@@ -296,4 +380,26 @@ mod tests {
         assert!(Setting::XpCooldown(Some(0)).validate().is_ok());
         assert!(Setting::XpCooldown(Some(30)).validate().is_ok());
     }
+}
+
+#[derive(Debug)]
+pub struct Resumable {
+    pub guild_id: i64,
+    pub voice_channel_id: i64,
+    pub voice_text_channel_id: Option<i64>,
+}
+
+pub async fn resumable(db: &PgPool) -> Result<Vec<Resumable>, AppError> {
+    let rows = sqlx::query_as!(
+        Resumable,
+        r#"SELECT guild_id AS "guild_id!",
+                  voice_channel_id AS "voice_channel_id!",
+                  voice_text_channel_id
+           FROM guild_config
+           WHERE stay_connected AND voice_channel_id IS NOT NULL"#
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows)
 }

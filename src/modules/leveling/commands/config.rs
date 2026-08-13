@@ -8,7 +8,7 @@ use poise::serenity_prelude as serenity;
 #[poise::command(
     slash_command,
     guild_only,
-    subcommands("show", "economy", "currency", "xp", "dj", "reset"),
+    subcommands("show", "economy", "currency", "xp", "dj", "voice", "reset"),
     default_member_permissions = "MANAGE_GUILD",
     required_permissions = "MANAGE_GUILD"
 )]
@@ -58,6 +58,18 @@ fn describe(config: &GuildConfig) -> serenity::CreateEmbed {
                 || "anyone can control playback".to_string(),
                 |role| format!("<@&{role}>"),
             ),
+            true,
+        )
+        .field(
+            "24/7 mode",
+            if config.stays_connected() {
+                "on — stays in voice".to_string()
+            } else {
+                format!(
+                    "off — leaves after {}s idle",
+                    config.idle_timeout().as_secs()
+                )
+            },
             true,
         )
         .field(
@@ -199,6 +211,53 @@ pub async fn dj(
     .await
 }
 
+#[poise::command(slash_command)]
+pub async fn voice(
+    ctx: Context<'_>,
+    #[description = "Stay in voice instead of leaving when idle or alone"] always_on: Option<bool>,
+    #[description = "Seconds of silence before leaving (ignored when 24/7 is on)"]
+    #[min = 10]
+    #[max = 86400]
+    idle_timeout: Option<i32>,
+) -> Result<(), AppError> {
+    if always_on.is_none() && idle_timeout.is_none() {
+        return Err(AppError::Message(
+            "Give `always_on`, `idle_timeout`, or both. Use `/config reset` for the default."
+                .into(),
+        ));
+    }
+
+    if let Some(on) = always_on {
+        let note = if on {
+            "24/7 mode on — I'll stay in voice and rejoin after a restart. Use `/leave` to send me away."
+        } else {
+            "24/7 mode off — I'll leave when the queue runs dry or everyone goes."
+        };
+
+        save(ctx, Setting::StayConnected(Some(on)), note).await?;
+
+        if !on {
+            save(
+                ctx,
+                Setting::VoiceChannels(None, None),
+                "Forgot the remembered voice channel.",
+            )
+            .await?;
+        }
+    }
+
+    if let Some(secs) = idle_timeout {
+        save(
+            ctx,
+            Setting::IdleTimeout(Some(secs)),
+            "Idle timeout updated.",
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, poise::ChoiceParameter)]
 pub enum Resettable {
     #[name = "economy"]
@@ -213,6 +272,10 @@ pub enum Resettable {
     XpCooldown,
     #[name = "dj role"]
     DjRole,
+    #[name = "24/7 mode"]
+    StayConnected,
+    #[name = "idle timeout"]
+    IdleTimeout,
 }
 
 #[poise::command(slash_command)]
@@ -227,6 +290,8 @@ pub async fn reset(
         Resettable::XpPerMessage => Setting::XpPerMessage(None),
         Resettable::XpCooldown => Setting::XpCooldown(None),
         Resettable::DjRole => Setting::DjRole(None),
+        Resettable::StayConnected => Setting::StayConnected(None),
+        Resettable::IdleTimeout => Setting::IdleTimeout(None),
     };
 
     save(ctx, cleared, "Back on the bot default.").await

@@ -45,8 +45,13 @@ feature itself ships. Items with no nested line need no schema change.
     `PlayMode::End`, never on a stop, so `/skip`, `/stop` and `/clear` behave
     normally instead of refilling the queue.
   - Both are behind the DJ role.
-- [ ] 24/7 mode with auto-reconnect and idle timeout
-  - [ ] db — `guild_config.stay_connected`, `guild_config.idle_timeout_secs`
+- [x] 24/7 mode with auto-reconnect and idle timeout — `/config voice`
+  - [x] db — `0009_voice_presence`: `stay_connected`, `idle_timeout_secs`, plus
+        `voice_channel_id`/`voice_text_channel_id` as remembered state
+  - Reconnect fires on `CacheReady`, skips guilds already connected, and logs
+    rather than failing when the channel is gone or permissions were revoked.
+  - `/leave` forgets the remembered channel, so being sent away sticks across a
+    restart instead of the bot rejoining on its own.
 - [ ] Saved/reloadable playlists per user
   - [ ] db — new `playlist` + `playlist_track` tables
 - [x] Lyrics display — `/lyrics [song]`, via lrclib.net rather than
@@ -155,5 +160,6 @@ does not collide.
 - [ ] `/profile` runs six sequential queries that could be one round trip
 - [ ] Section labels on the profile card use `accent.light`, which only guarantees
       luminance ≥ 0.12 — a very dark user accent reads at ~3:1 over a background
-- [ ] Paused playback does not count toward the voice idle timeout, so a paused bot
-      stays in the channel indefinitely while anyone else is present
+- [x] ~~Paused playback does not count toward the voice idle timeout~~ — fixed
+      with 24/7: a paused track now counts as idle, and 24/7 mode or a longer
+      `/config voice idle_timeout` is the way to hold the channel deliberately

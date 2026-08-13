@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT guild_id AS \"guild_id!\",\n                  voice_channel_id AS \"voice_channel_id!\",\n                  voice_text_channel_id\n           FROM guild_config\n           WHERE stay_connected AND voice_channel_id IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "guild_id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "guild_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "voice_channel_id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "voice_channel_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "voice_text_channel_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "guild_config",
+            "name": "voice_text_channel_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "c832ef328755af6da87d7c8bc7c6a978cb5d1c54f472712a3b4e2ac9da0fbaeb"
+}

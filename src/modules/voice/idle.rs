@@ -7,7 +7,6 @@ use std::{
 };
 
 const EMPTY_GRACE: Duration = Duration::from_secs(30);
-const IDLE_GRACE: Duration = Duration::from_secs(60);
 const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
 
 pub type Sessions = Arc<DashMap<serenity::GuildId, VoiceSession>>;
@@ -28,7 +27,7 @@ impl LeaveReason {
     fn message(self) -> &'static str {
         match self {
             Self::Empty => "Left the voice channel — everyone else left.",
-            Self::Idle => "Left the voice channel — nothing has been queued for a minute.",
+            Self::Idle => "Left the voice channel — nothing has been playing for a while.",
         }
     }
 }
@@ -42,7 +41,13 @@ impl VoiceSession {
         }
     }
 
-    fn observe(&mut self, now: Instant, alone: bool, queue_empty: bool) -> Option<LeaveReason> {
+    fn observe(
+        &mut self,
+        now: Instant,
+        alone: bool,
+        idle: bool,
+        idle_after: Duration,
+    ) -> Option<LeaveReason> {
         if alone {
             let since = *self.empty_since.get_or_insert(now);
             if now.duration_since(since) >= EMPTY_GRACE {
@@ -52,9 +57,9 @@ impl VoiceSession {
             self.empty_since = None;
         }
 
-        if queue_empty {
+        if idle {
             let since = *self.idle_since.get_or_insert(now);
-            if now.duration_since(since) >= IDLE_GRACE {
+            if now.duration_since(since) >= idle_after {
                 return Some(LeaveReason::Idle);
             }
         } else {
@@ -113,15 +118,29 @@ async fn check(
         return;
     };
 
-    let (channel, queue_empty) = {
+    let settings = data.guild_config(guild_id.get() as i64).await;
+
+    let (channel, current) = {
         let call = call.lock().await;
-        (call.current_channel(), call.queue().is_empty())
+        (call.current_channel(), call.queue().current())
+    };
+
+    let idle = match current {
+        None => true,
+        Some(handle) => handle
+            .get_info()
+            .await
+            .is_ok_and(|state| matches!(state.playing, songbird::tracks::PlayMode::Pause)),
     };
 
     let Some(channel) = channel else {
         forget(&data.voice_sessions, guild_id);
         return;
     };
+
+    if settings.stays_connected() {
+        return;
+    }
 
     let Some(others) = others_present(ctx, guild_id, channel) else {
         return;
@@ -132,7 +151,7 @@ async fn check(
             return;
         };
         session
-            .observe(Instant::now(), others == 0, queue_empty)
+            .observe(Instant::now(), others == 0, idle, settings.idle_timeout())
             .map(|reason| (reason, session.text_channel))
     };
 
@@ -176,6 +195,8 @@ fn others_present(
 mod tests {
     use super::*;
 
+    const IDLE: Duration = Duration::from_secs(60);
+
     fn session() -> VoiceSession {
         VoiceSession::new(serenity::ChannelId::new(1))
     }
@@ -185,14 +206,19 @@ mod tests {
         let mut session = session();
         let start = Instant::now();
 
-        assert!(session.observe(start, true, false).is_none());
+        assert!(session.observe(start, true, false, IDLE).is_none());
         assert!(
             session
-                .observe(start + EMPTY_GRACE - Duration::from_secs(1), true, false)
+                .observe(
+                    start + EMPTY_GRACE - Duration::from_secs(1),
+                    true,
+                    false,
+                    IDLE
+                )
                 .is_none()
         );
         assert!(matches!(
-            session.observe(start + EMPTY_GRACE, true, false),
+            session.observe(start + EMPTY_GRACE, true, false, IDLE),
             Some(LeaveReason::Empty)
         ));
     }
@@ -202,11 +228,11 @@ mod tests {
         let mut session = session();
         let start = Instant::now();
 
-        session.observe(start, true, false);
-        session.observe(start + Duration::from_secs(29), false, false);
+        session.observe(start, true, false, IDLE);
+        session.observe(start + Duration::from_secs(29), false, false, IDLE);
         assert!(
             session
-                .observe(start + Duration::from_secs(31), true, false)
+                .observe(start + Duration::from_secs(31), true, false, IDLE)
                 .is_none()
         );
     }
@@ -216,15 +242,51 @@ mod tests {
         let mut session = session();
         let start = Instant::now();
 
-        assert!(session.observe(start, false, true).is_none());
+        assert!(session.observe(start, false, true, IDLE).is_none());
         assert!(
-            session.observe(start + EMPTY_GRACE, false, true).is_none(),
+            session
+                .observe(start + EMPTY_GRACE, false, true, IDLE)
+                .is_none(),
             "the empty-channel grace must not apply while people are present"
         );
         assert!(matches!(
-            session.observe(start + IDLE_GRACE, false, true),
+            session.observe(start + IDLE, false, true, IDLE),
             Some(LeaveReason::Idle)
         ));
+    }
+
+    #[test]
+    fn a_longer_timeout_is_honoured() {
+        let mut session = session();
+        let start = Instant::now();
+        let long = Duration::from_secs(1_800);
+
+        assert!(session.observe(start, false, true, long).is_none());
+        assert!(
+            session
+                .observe(start + Duration::from_secs(1_799), false, true, long)
+                .is_none(),
+            "the default 60s must not apply once a timeout is configured"
+        );
+        assert!(matches!(
+            session.observe(start + long, false, true, long),
+            Some(LeaveReason::Idle)
+        ));
+    }
+
+    #[test]
+    fn a_paused_track_counts_as_idle() {
+        let mut session = session();
+        let start = Instant::now();
+
+        assert!(session.observe(start, false, true, IDLE).is_none());
+        assert!(
+            matches!(
+                session.observe(start + IDLE, false, true, IDLE),
+                Some(LeaveReason::Idle)
+            ),
+            "pausing and walking away should not hold the channel forever"
+        );
     }
 
     #[test]
@@ -232,9 +294,9 @@ mod tests {
         let mut session = session();
         let start = Instant::now();
 
-        session.observe(start, true, false);
+        session.observe(start, true, false, IDLE);
         assert!(matches!(
-            session.observe(start + EMPTY_GRACE, true, false),
+            session.observe(start + EMPTY_GRACE, true, false, IDLE),
             Some(LeaveReason::Empty)
         ));
     }
