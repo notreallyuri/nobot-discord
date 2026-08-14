@@ -14,6 +14,7 @@ pub mod boosters;
 pub mod commands;
 pub mod setup;
 pub mod store;
+pub mod storefront;
 
 pub struct LevelingModule;
 
@@ -52,8 +53,18 @@ impl Module for LevelingModule {
         data: &'a crate::data::Data,
     ) -> EventFuture<'a> {
         Box::pin(async move {
-            if let serenity::FullEvent::Message { new_message } = event {
-                on_message(ctx, data, new_message).await?;
+            match event {
+                serenity::FullEvent::Message { new_message } => {
+                    on_message(ctx, data, new_message).await?;
+                }
+                serenity::FullEvent::InteractionCreate {
+                    interaction: serenity::Interaction::Component(press),
+                } if press.data.custom_id.starts_with(storefront::PREFIX) => {
+                    if let Err(e) = browse_shop(ctx, data, press).await {
+                        tracing::warn!(?e, user = %press.user.id, "shop interaction failed");
+                    }
+                }
+                _ => {}
             }
             Ok(())
         })
@@ -166,5 +177,53 @@ async fn announce_level_up(
         .add_file(serenity::CreateAttachment::bytes(png, "levelup.png"));
 
     msg.channel_id.send_message(&ctx.http, message).await?;
+    Ok(())
+}
+
+async fn browse_shop(
+    ctx: &serenity::Context,
+    data: &Data,
+    press: &serenity::ComponentInteraction,
+) -> Result<(), AppError> {
+    let Some(step) = storefront::parse(&press.data.custom_id) else {
+        return Ok(());
+    };
+
+    let (aisle, page) = match step {
+        storefront::Move::Turn(aisle, page) => (aisle, page),
+        storefront::Move::Switch => {
+            let serenity::ComponentInteractionDataKind::StringSelect { values } = &press.data.kind
+            else {
+                return Ok(());
+            };
+
+            let Some(aisle) = values
+                .first()
+                .and_then(|slug| storefront::Aisle::from_slug(slug))
+            else {
+                return Ok(());
+            };
+
+            (aisle, 0)
+        }
+    };
+
+    let guild_id = press.guild_id.map_or(0, |id| id.get() as i64);
+    let settings = data.guild_config(guild_id).await;
+    let wallet = storefront::wallet(&data.db, press.user.id.get() as i64).await?;
+    let shelf = storefront::shelf(aisle, page).await?;
+
+    let response = serenity::CreateInteractionResponseMessage::new()
+        .embed(storefront::embed(aisle, page, &wallet, settings.currency()))
+        .components(storefront::components(aisle, page))
+        .add_file(serenity::CreateAttachment::bytes(shelf, storefront::IMAGE));
+
+    press
+        .create_response(
+            &ctx.http,
+            serenity::CreateInteractionResponse::UpdateMessage(response),
+        )
+        .await?;
+
     Ok(())
 }

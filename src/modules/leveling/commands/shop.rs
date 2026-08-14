@@ -1,7 +1,7 @@
 use crate::{
     Context,
     error::AppError,
-    modules::leveling::{badges, boosters, store},
+    modules::leveling::{badges, boosters, store, storefront},
 };
 use poise::serenity_prelude as serenity;
 
@@ -17,79 +17,25 @@ pub async fn shop(_: Context<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Browse badges you can buy
+/// Browse badges and boosters you can buy
 #[poise::command(slash_command)]
 pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
     let user_id = ctx.author().id.get() as i64;
-    let db = &ctx.data().db;
-
     let settings = ctx.data().guild_config(guild_of(ctx)?).await;
-    let currency = settings.currency();
+    let wallet = storefront::wallet(&ctx.data().db, user_id).await?;
 
-    let balance = store::balance(db, user_id).await?;
-    let owned: Vec<String> = store::owned_badges(db, user_id)
-        .await?
-        .into_iter()
-        .map(|badge| badge.badge_id)
-        .collect();
+    let aisle = storefront::Aisle::Badges;
+    let shelf = storefront::shelf(aisle, 0).await?;
 
-    let lines: Vec<String> = badges::purchasable()
-        .map(|badge| {
-            let price = badge.price.expect("purchasable");
-            let status = if owned.iter().any(|id| id == badge.id) {
-                "owned".to_string()
-            } else if balance >= price {
-                format!("{price} {currency}")
-            } else {
-                format!("{price} {currency} — need {} more", price - balance)
-            };
+    ctx.send(
+        poise::CreateReply::default()
+            .ephemeral(true)
+            .embed(storefront::embed(aisle, 0, &wallet, settings.currency()))
+            .components(storefront::components(aisle, 0))
+            .attachment(serenity::CreateAttachment::bytes(shelf, storefront::IMAGE)),
+    )
+    .await?;
 
-            format!("**{}** · {}\n{}", badge.name, status, badge.description)
-        })
-        .collect();
-
-    let boosts: Vec<String> = boosters::catalogue()
-        .map(|booster| {
-            let afford = if balance >= booster.price {
-                format!("{} {currency}", booster.price)
-            } else {
-                format!(
-                    "{} {currency} — need {} more",
-                    booster.price,
-                    booster.price - balance
-                )
-            };
-
-            format!(
-                "**{}** · {} · {}\n{}",
-                booster.name,
-                booster.label(),
-                afford,
-                booster.description
-            )
-        })
-        .collect();
-
-    let active = match store::active_booster(db, user_id).await? {
-        Some(booster) => format!(
-            " · {}x active",
-            booster.multiplier_pct as f64 / boosters::NORMAL_PCT as f64
-        ),
-        None => String::new(),
-    };
-
-    let embed = serenity::CreateEmbed::new()
-        .title("Shop")
-        .description(format!(
-            "**Badges**\n{}\n\n**XP boosters**\n{}",
-            lines.join("\n\n"),
-            boosts.join("\n\n")
-        ))
-        .footer(serenity::CreateEmbedFooter::new(format!(
-            "You have {balance} {currency}{active} · buy with /shop buy"
-        )));
-
-    ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 

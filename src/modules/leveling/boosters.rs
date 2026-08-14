@@ -1,11 +1,19 @@
 use std::time::Duration;
 
+macro_rules! icon {
+    ($name:literal) => {
+        include_str!(concat!("../../../assets/icons/", $name, ".svg"))
+    };
+}
+
 pub const NORMAL_PCT: i64 = 100;
 pub const MAX_PCT: i64 = 1_000;
 
 pub struct Booster {
     pub id: &'static str,
     pub name: &'static str,
+    pub icon: &'static str,
+    pub colour: &'static str,
     pub multiplier_pct: i64,
     pub hours: i64,
     pub price: i64,
@@ -32,6 +40,8 @@ impl Booster {
 pub const BOOSTERS: &[Booster] = &[
     Booster {
         id: "spark",
+        icon: icon!("zap"),
+        colour: "#facc15",
         name: "Spark",
         multiplier_pct: 150,
         hours: 1,
@@ -40,6 +50,8 @@ pub const BOOSTERS: &[Booster] = &[
     },
     Booster {
         id: "surge",
+        icon: icon!("chevrons-up"),
+        colour: "#38bdf8",
         name: "Surge",
         multiplier_pct: 200,
         hours: 1,
@@ -48,6 +60,8 @@ pub const BOOSTERS: &[Booster] = &[
     },
     Booster {
         id: "overdrive",
+        icon: icon!("gauge"),
+        colour: "#fb7185",
         name: "Overdrive",
         multiplier_pct: 300,
         hours: 1,
@@ -56,6 +70,8 @@ pub const BOOSTERS: &[Booster] = &[
     },
     Booster {
         id: "momentum",
+        icon: icon!("timer"),
+        colour: "#a78bfa",
         name: "Momentum",
         multiplier_pct: 200,
         hours: 24,

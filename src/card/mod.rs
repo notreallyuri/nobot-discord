@@ -12,6 +12,7 @@ pub mod background;
 pub mod emblem;
 pub mod levelup;
 pub mod profile;
+pub mod strip;
 pub mod welcome;
 
 const FIGTREE: &[u8] = include_bytes!("../../assets/fonts/Figtree-Regular.ttf");
