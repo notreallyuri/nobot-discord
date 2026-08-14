@@ -42,7 +42,6 @@ pub const BADGES: &[Badge] = &[
         price: None,
         description: "Reach level 50.",
     },
-    // Bought from the shop.
     Badge {
         id: "dot",
         name: "Full Stop",
@@ -187,7 +186,6 @@ mod tests {
             let body = icon_body(badge.icon);
 
             assert!(!body.is_empty(), "{} has an empty icon", badge.id);
-            // A nested <svg> would carry its own sizing and break placement.
             assert!(!body.contains("<svg"), "{} kept its wrapper", badge.id);
             assert!(
                 body.contains("<path") || body.contains("<circle"),

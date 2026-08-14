@@ -1,11 +1,3 @@
-//! Validates the retry wrapper against YouTube's intermittent 403s.
-//!
-//! googlevideo throttles whole-file range requests, which is the only shape
-//! songbird's `HttpRequest` sends; a bare `YoutubeDl` fails roughly 5-15% of
-//! the time. This measures both so a regression in `Retrying` is visible.
-//!
-//!     cargo test --test http_client_probe -- --ignored --nocapture
-
 use songbird::input::{
     Compose, Input, YoutubeDl,
     codecs::{get_codec_registry, get_probe},
@@ -14,8 +6,6 @@ use songbird::input::{
 const VIDEO: &str = "https://www.youtube.com/watch?v=uiBiKC0TC3I";
 const ROUNDS: usize = 20;
 
-/// Mirrors `dis_ru::modules::voice::sources::Retrying`, which lives in the
-/// binary crate and so cannot be imported here.
 struct Retrying<C> {
     inner: C,
     attempts: usize,

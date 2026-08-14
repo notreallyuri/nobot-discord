@@ -69,11 +69,9 @@ mod tests {
 
     #[test]
     fn detects_only_real_crossings() {
-        // 100 xp is exactly level 1.
         assert_eq!(leveled_up(99, 100), Some(1));
         assert_eq!(leveled_up(100, 150), None);
         assert_eq!(leveled_up(0, 99), None);
-        // Enough XP at once to skip a level still reports the level reached.
         assert_eq!(leveled_up(0, 400), Some(2));
     }
 
