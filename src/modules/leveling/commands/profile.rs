@@ -29,8 +29,7 @@ pub async fn profile(
     let key = MemberId { guild_id, user_id };
 
     let data = ctx.data();
-    let guild = store::guild_rank(&data.db, key).await?;
-    let global = store::global_rank(&data.db, user_id).await?;
+    let page = store::profile_page(&data.db, key).await?;
 
     let http = ctx
         .serenity_context()
@@ -39,22 +38,30 @@ pub async fn profile(
         .await
         .get::<HttpKey>()
         .cloned();
-    let avatar = match &http {
-        Some(client) => card::avatar_data_uri(client, target).await,
-        None => None,
-    };
+    let (avatar, images) = tokio::join!(
+        async {
+            match &http {
+                Some(client) => card::avatar_data_uri(client, target).await,
+                None => None,
+            }
+        },
+        card::background::uris_for_card(page.background, page.background_blur),
+    );
 
-    let style = store::profile_style(&data.db, user_id).await?;
-    let (background, background_blur) =
-        card::background::uris_for_card(style.background, style.background_blur).await;
-    let accent = Accent::from_stored(style.accent);
+    let accent = Accent::from_stored(page.accent);
 
-    let equipped: Vec<&'static badges::Badge> = store::equipped_badges(&data.db, user_id)
-        .await?
+    if let Some(restored) = &images.restore
+        && let Err(error) =
+            store::set_background(&data.db, user_id, &restored.sharp, &restored.blurred).await
+    {
+        tracing::warn!(?error, user_id, "could not store the refitted background");
+    }
+
+    let equipped: Vec<&'static badges::Badge> = page
+        .badges
         .iter()
         .filter_map(|id| badges::find(id))
         .collect();
-    let coins = store::balance(&data.db, user_id).await?;
     let settings = data.guild_config(guild_id).await;
 
     let svg = card::profile::svg(&card::profile::Profile {
@@ -62,12 +69,12 @@ pub async fn profile(
         handle: &target.name,
         accent: &accent,
         avatar: avatar.as_deref(),
-        background: background.as_deref(),
-        background_blur: background_blur.as_deref(),
-        guild: standing(&guild),
-        global: standing(&global),
+        background: images.sharp.as_deref(),
+        background_blur: images.blurred.as_deref(),
+        guild: standing(&page.guild),
+        global: standing(&page.global),
         badges: &equipped,
-        coins,
+        coins: page.coins,
         currency: settings.currency(),
     });
 

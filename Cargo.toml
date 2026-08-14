@@ -27,16 +27,10 @@ sqlx = { version = "0.9", default-features = false, features = [
 poise = "0.6.2"
 songbird = { version = "0.6.0", features = ["builtin-queue"] }
 serenity = { version = "0.12", default-features = false, features = ["voice"] }
-# songbird depends on symphonia with default-features = false and enables no
-# formats, leaving codec choice to the downstream crate. Without this, the only
-# readers registered are DCA/Raw and every stream fails to probe.
-# Defaults cover mkv (YouTube's WebM/Opus) and ogg; the Opus *decoder* itself is
-# supplied by songbird. isomp4 + aac + mp3 cover m4a and direct-URL fallbacks.
 symphonia = { version = "0.5", features = ["isomp4", "aac", "mp3"] }
 
 dashmap = "6.2.1"
 thiserror = "2.0.18"
-# Default features would pull in native-tls/openssl alongside sqlx's rustls.
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
     "json",

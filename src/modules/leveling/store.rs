@@ -79,23 +79,6 @@ pub async fn guild_rank(db: &PgPool, key: MemberId) -> Result<RankInfo, AppError
     Ok(info)
 }
 
-pub async fn global_rank(db: &PgPool, user_id: i64) -> Result<RankInfo, AppError> {
-    let info = sqlx::query_as!(
-        RankInfo,
-        r#"WITH me AS (
-               SELECT COALESCE((SELECT experience FROM users WHERE user_id = $1), 0) AS xp
-           )
-           SELECT
-               me.xp AS "experience!",
-               (SELECT COUNT(*) + 1 FROM users WHERE experience > me.xp) AS "rank!"
-           FROM me"#,
-        user_id,
-    )
-    .fetch_one(db)
-    .await?;
-    Ok(info)
-}
-
 pub async fn leaderboard(db: &PgPool, guild_id: i64, limit: i64) -> Result<Vec<UserXp>, AppError> {
     let rows = sqlx::query_as!(
         UserXp,
@@ -110,23 +93,73 @@ pub async fn leaderboard(db: &PgPool, guild_id: i64, limit: i64) -> Result<Vec<U
     Ok(rows)
 }
 
-#[derive(Debug, Default)]
-pub struct ProfileStyle {
+#[derive(Debug)]
+pub struct ProfilePage {
+    pub guild: RankInfo,
+    pub global: RankInfo,
+    pub coins: i64,
+    pub accent: Option<i32>,
     pub background: Option<Vec<u8>>,
     pub background_blur: Option<Vec<u8>>,
-    pub accent: Option<i32>,
+    pub badges: Vec<String>,
 }
 
-pub async fn profile_style(db: &PgPool, user_id: i64) -> Result<ProfileStyle, AppError> {
-    let style = sqlx::query_as!(
-        ProfileStyle,
-        "SELECT background, background_blur, accent FROM profile WHERE user_id = $1",
-        user_id
+pub async fn profile_page(db: &PgPool, key: MemberId) -> Result<ProfilePage, AppError> {
+    let row = sqlx::query!(
+        r#"WITH guild AS (
+               SELECT COALESCE(
+                   (SELECT experience FROM guild_member WHERE guild_id = $1 AND user_id = $2),
+                   0
+               ) AS xp
+           ),
+           global AS (
+               SELECT COALESCE((SELECT experience FROM users WHERE user_id = $2), 0) AS xp
+           )
+           SELECT
+               guild.xp AS "guild_experience!",
+               (SELECT COUNT(*) + 1 FROM guild_member
+                 WHERE guild_id = $1 AND experience > guild.xp) AS "guild_rank!",
+               global.xp AS "global_experience!",
+               (SELECT COUNT(*) + 1 FROM users WHERE experience > global.xp) AS "global_rank!",
+               p.coins,
+               p.accent,
+               p.background,
+               p.background_blur,
+               ARRAY(
+                   SELECT badge_id FROM user_badge
+                    WHERE user_id = $2 AND equipped ORDER BY acquired_at
+               ) AS "badges!"
+           FROM guild CROSS JOIN global
+           LEFT JOIN profile p ON p.user_id = $2"#,
+        key.guild_id,
+        key.user_id,
     )
-    .fetch_optional(db)
+    .fetch_one(db)
     .await?;
 
-    Ok(style.unwrap_or_default())
+    Ok(ProfilePage {
+        guild: RankInfo {
+            experience: row.guild_experience,
+            rank: row.guild_rank,
+        },
+        global: RankInfo {
+            experience: row.global_experience,
+            rank: row.global_rank,
+        },
+        coins: row.coins.unwrap_or(0),
+        accent: row.accent,
+        background: row.background,
+        background_blur: row.background_blur,
+        badges: row.badges,
+    })
+}
+
+pub async fn accent(db: &PgPool, user_id: i64) -> Result<Option<i32>, AppError> {
+    let accent = sqlx::query_scalar!("SELECT accent FROM profile WHERE user_id = $1", user_id)
+        .fetch_optional(db)
+        .await?;
+
+    Ok(accent.flatten())
 }
 
 pub async fn set_background(
@@ -223,18 +256,6 @@ pub async fn owned_badges(db: &PgPool, user_id: i64) -> Result<Vec<OwnedBadge>, 
         OwnedBadge,
         "SELECT badge_id, equipped FROM user_badge
          WHERE user_id = $1 ORDER BY acquired_at",
-        user_id
-    )
-    .fetch_all(db)
-    .await?;
-
-    Ok(rows)
-}
-
-pub async fn equipped_badges(db: &PgPool, user_id: i64) -> Result<Vec<String>, AppError> {
-    let rows = sqlx::query_scalar!(
-        "SELECT badge_id FROM user_badge
-         WHERE user_id = $1 AND equipped ORDER BY acquired_at",
         user_id
     )
     .fetch_all(db)

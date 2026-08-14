@@ -193,26 +193,24 @@ pub fn data_uri(image: &[u8]) -> String {
     format!("data:image/jpeg;base64,{}", STANDARD.encode(image))
 }
 
-pub fn fit_to_card(stored: Vec<u8>) -> Vec<u8> {
+fn resize_to(stored: Vec<u8>, width: u32, height: u32) -> (Vec<u8>, bool) {
     if let Ok(reader) = ImageReader::new(Cursor::new(&stored)).with_guessed_format()
-        && let Ok((width, height)) = reader.into_dimensions()
-        && width == profile::PIXEL_WIDTH
-        && height == profile::PIXEL_HEIGHT
+        && let Ok(dimensions) = reader.into_dimensions()
+        && dimensions == (width, height)
     {
-        return stored;
+        return (stored, false);
     }
 
     let Ok(decoded) = image::load_from_memory(&stored) else {
-        return stored;
+        return (stored, false);
     };
 
-    let resized = decoded.resize_to_fill(
-        profile::PIXEL_WIDTH,
-        profile::PIXEL_HEIGHT,
-        image::imageops::FilterType::Lanczos3,
-    );
+    let resized = decoded.resize_to_fill(width, height, image::imageops::FilterType::Lanczos3);
 
-    encode(&resized).unwrap_or(stored)
+    match encode(&resized) {
+        Ok(bytes) => (bytes, true),
+        Err(_) => (stored, false),
+    }
 }
 
 fn derive_blur(sharp: &[u8]) -> Option<Vec<u8>> {
@@ -220,29 +218,63 @@ fn derive_blur(sharp: &[u8]) -> Option<Vec<u8>> {
     blur(&card).ok()
 }
 
-pub async fn uris_for_card(
-    sharp: Option<Vec<u8>>,
-    blurred: Option<Vec<u8>>,
-) -> (Option<String>, Option<String>) {
+pub struct CardImages {
+    pub sharp: Option<String>,
+    pub blurred: Option<String>,
+    pub restore: Option<Prepared>,
+}
+
+pub async fn uris_for_card(sharp: Option<Vec<u8>>, blurred: Option<Vec<u8>>) -> CardImages {
     if sharp.is_none() && blurred.is_none() {
-        return (None, None);
+        return CardImages {
+            sharp: None,
+            blurred: None,
+            restore: None,
+        };
     }
 
     tokio::task::spawn_blocking(move || {
-        let sharp = sharp.map(fit_to_card);
-
-        let blurred = match blurred {
-            Some(bytes) => Some(bytes),
-            None => sharp.as_deref().and_then(derive_blur),
+        let (sharp, sharp_changed) = match sharp {
+            Some(bytes) => {
+                let (bytes, changed) =
+                    resize_to(bytes, profile::PIXEL_WIDTH, profile::PIXEL_HEIGHT);
+                (Some(bytes), changed)
+            }
+            None => (None, false),
         };
 
-        (
-            sharp.map(|bytes| data_uri(&bytes)),
-            blurred.map(|bytes| data_uri(&bytes)),
-        )
+        let (blurred, blur_changed) = match blurred {
+            Some(bytes) => {
+                let (bytes, changed) = resize_to(
+                    bytes,
+                    profile::PIXEL_WIDTH / BLUR_SCALE,
+                    profile::PIXEL_HEIGHT / BLUR_SCALE,
+                );
+                (Some(bytes), changed)
+            }
+            None => (sharp.as_deref().and_then(derive_blur), true),
+        };
+
+        let restore = match (&sharp, &blurred) {
+            (Some(sharp), Some(blurred)) if sharp_changed || blur_changed => Some(Prepared {
+                sharp: sharp.clone(),
+                blurred: blurred.clone(),
+            }),
+            _ => None,
+        };
+
+        CardImages {
+            sharp: sharp.map(|bytes| data_uri(&bytes)),
+            blurred: blurred.map(|bytes| data_uri(&bytes)),
+            restore,
+        }
     })
     .await
-    .unwrap_or((None, None))
+    .unwrap_or(CardImages {
+        sharp: None,
+        blurred: None,
+        restore: None,
+    })
 }
 
 #[cfg(test)]
@@ -371,6 +403,81 @@ mod tests {
             "the blurred copy should be a fraction of the sharp one: {} vs {} bytes",
             out.blurred.len(),
             out.sharp.len()
+        );
+    }
+
+    fn jpeg_of(width: u32, height: u32) -> Vec<u8> {
+        let source = image::RgbImage::from_fn(width, height, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, 128])
+        });
+        let mut out = Vec::new();
+        image::DynamicImage::ImageRgb8(source)
+            .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Jpeg)
+            .expect("encode");
+        out
+    }
+
+    fn dimensions(bytes: &[u8]) -> (u32, u32) {
+        let decoded = image::load_from_memory(bytes).expect("valid jpeg");
+        (decoded.width(), decoded.height())
+    }
+
+    #[tokio::test]
+    async fn a_background_at_the_current_size_is_not_rewritten() {
+        let prepared = prepare_bytes(&checkerboard()).expect("normalise");
+
+        let images = uris_for_card(Some(prepared.sharp), Some(prepared.blurred)).await;
+
+        assert!(images.sharp.is_some() && images.blurred.is_some());
+        assert!(
+            images.restore.is_none(),
+            "a background already in shape should not cost a write on every render"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_background_stored_at_an_older_size_is_handed_back_for_storage() {
+        let stale_sharp = jpeg_of(760, 380);
+        let stale_blur = jpeg_of(760, 380);
+
+        let images = uris_for_card(Some(stale_sharp), Some(stale_blur)).await;
+
+        let restore = images
+            .restore
+            .expect("a background from an older card size should be offered back for storage");
+
+        assert_eq!(
+            dimensions(&restore.sharp),
+            (profile::PIXEL_WIDTH, profile::PIXEL_HEIGHT)
+        );
+        assert_eq!(
+            dimensions(&restore.blurred),
+            (
+                profile::PIXEL_WIDTH / BLUR_SCALE,
+                profile::PIXEL_HEIGHT / BLUR_SCALE
+            )
+        );
+
+        let settled = uris_for_card(Some(restore.sharp), Some(restore.blurred)).await;
+        assert!(
+            settled.restore.is_none(),
+            "storing the refitted copy should settle it for good"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_missing_blur_is_derived_and_offered_for_storage() {
+        let prepared = prepare_bytes(&checkerboard()).expect("normalise");
+
+        let images = uris_for_card(Some(prepared.sharp), None).await;
+
+        assert!(
+            images.blurred.is_some(),
+            "the blur should have been derived"
+        );
+        assert!(
+            images.restore.is_some(),
+            "a derived blur should be stored rather than rebuilt every render"
         );
     }
 

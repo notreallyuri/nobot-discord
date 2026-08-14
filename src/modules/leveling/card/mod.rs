@@ -842,9 +842,9 @@ mod timing {
         );
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore = "diagnostic: where does a profile render spend its time"]
-    fn profile_render_breakdown() {
+    async fn profile_render_breakdown() {
         let source = image::RgbImage::from_fn(2000, 1200, |x, y| {
             image::Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
         });
@@ -861,8 +861,9 @@ mod timing {
         ms("background::prepare_bytes (upload)", start);
 
         let start = Instant::now();
-        let refit = background::fit_to_card(prepared.sharp.clone());
-        ms("fit_to_card (already correct size)", start);
+        let settled = background::uris_for_card(Some(prepared.sharp), Some(prepared.blurred)).await;
+        ms("uris_for_card (already in shape)", start);
+        assert!(settled.restore.is_none());
 
         let stale = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
             760,
@@ -878,13 +879,13 @@ mod timing {
             .expect("encode stale");
 
         let start = Instant::now();
-        let _ = background::fit_to_card(stale_bytes.clone());
-        ms("fit_to_card (stale size, resizes)", start);
+        let refitted =
+            background::uris_for_card(Some(stale_bytes.clone()), Some(stale_bytes)).await;
+        ms("uris_for_card (stale, refits once)", start);
+        assert!(refitted.restore.is_some());
 
-        let start = Instant::now();
-        let sharp = background::data_uri(&refit);
-        let blurred = background::data_uri(&prepared.blurred);
-        ms("data_uri x2 (base64)", start);
+        let sharp = settled.sharp.expect("sharp data uri");
+        let blurred = settled.blurred.expect("blurred data uri");
 
         let accent = accent::Accent::default();
         let build = || {

@@ -132,8 +132,9 @@ async fn announce_level_up(
         None => None,
     };
 
-    let style = store::profile_style(&data.db, msg.author.id.get() as i64).await?;
-    let accent = card::accent::Accent::from_stored(style.accent);
+    let accent = card::accent::Accent::from_stored(
+        store::accent(&data.db, msg.author.id.get() as i64).await?,
+    );
 
     let svg = card::levelup::svg(&card::levelup::LevelUp {
         name: msg.author.display_name(),

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT accent FROM profile WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "accent",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "accent"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "3da9e30256c7082a1cb33e81e2aca0302f0d8344df599a98659c027fee83e348"
+}
