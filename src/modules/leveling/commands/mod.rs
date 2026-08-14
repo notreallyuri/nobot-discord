@@ -14,4 +14,4 @@ pub use color::color;
 pub use config::config;
 pub use leaderboard::*;
 pub use profile::*;
-pub use shop::{buy, shop};
+pub use shop::shop;

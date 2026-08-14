@@ -30,7 +30,6 @@ impl Module for LevelingModule {
             commands::color(),
             commands::badges(),
             commands::shop(),
-            commands::buy(),
             commands::achievements(),
             commands::config(),
         ]

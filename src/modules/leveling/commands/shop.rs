@@ -11,9 +11,15 @@ fn guild_of(ctx: Context<'_>) -> Result<i64, AppError> {
         .ok_or_else(|| AppError::Message("This command can only be used in a server.".into()))
 }
 
+/// Browse and buy badges
+#[poise::command(slash_command, guild_only, subcommands("list", "buy"))]
+pub async fn shop(_: Context<'_>) -> Result<(), AppError> {
+    Ok(())
+}
+
 /// Browse badges you can buy
-#[poise::command(slash_command, guild_only)]
-pub async fn shop(ctx: Context<'_>) -> Result<(), AppError> {
+#[poise::command(slash_command)]
+pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
     let user_id = ctx.author().id.get() as i64;
     let db = &ctx.data().db;
 
@@ -46,7 +52,7 @@ pub async fn shop(ctx: Context<'_>) -> Result<(), AppError> {
         .title("Badge shop")
         .description(lines.join("\n\n"))
         .footer(serenity::CreateEmbedFooter::new(format!(
-            "You have {balance} {currency} · buy with /buy"
+            "You have {balance} {currency} · buy with /shop buy"
         )));
 
     ctx.send(poise::CreateReply::default().embed(embed)).await?;
@@ -63,7 +69,7 @@ async fn purchasable_names<'a>(
 }
 
 /// Buy a badge with your coins
-#[poise::command(slash_command, guild_only)]
+#[poise::command(slash_command)]
 pub async fn buy(
     ctx: Context<'_>,
     #[description = "Which badge to buy"]
@@ -72,7 +78,7 @@ pub async fn buy(
 ) -> Result<(), AppError> {
     let Some(badge) = badges::resolve(&badge) else {
         return Err(AppError::Message(format!(
-            "There's no badge called `{}`. Try /shop.",
+            "There's no badge called `{}`. Try /shop list.",
             badge.chars().take(30).collect::<String>()
         )));
     };

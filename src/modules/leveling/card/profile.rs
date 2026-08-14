@@ -405,7 +405,7 @@ pub fn svg(card: &Profile<'_>) -> String {
             r##"<text x="{cx}" y="{y}" font-family="{FONT_FAMILY}" font-size="12"
                       fill="{faint}" text-anchor="middle">
                   <tspan x="{cx}">No badges yet</tspan>
-                  <tspan x="{cx}" dy="18">see /shop</tspan>
+                  <tspan x="{cx}" dy="18">see /shop list</tspan>
                 </text>"##,
             cx = STRIP.centre(),
             y = STRIP.y + 150.0,

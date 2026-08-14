@@ -20,7 +20,7 @@ pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
     if owned.is_empty() {
         ctx.send(
             poise::CreateReply::default()
-                .content("You don't own any badges yet — see `/shop` or `/achievements`.")
+                .content("You don't own any badges yet — see `/shop list` or `/achievements`.")
                 .ephemeral(true),
         )
         .await?;
