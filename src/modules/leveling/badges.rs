@@ -96,6 +96,46 @@ pub const BADGES: &[Badge] = &[
         price: Some(1_000),
         description: "Runs the place.",
     },
+    Badge {
+        id: "crown",
+        name: "Sovereign",
+        icon: icon!("crown"),
+        colour: "#eab308",
+        price: Some(1_200),
+        description: "Rules with a light touch.",
+    },
+    Badge {
+        id: "flame",
+        name: "Wildfire",
+        icon: icon!("flame"),
+        colour: "#f97316",
+        price: Some(1_800),
+        description: "Impossible to ignore.",
+    },
+    Badge {
+        id: "eclipse",
+        name: "Eclipse",
+        icon: icon!("moon"),
+        colour: "#22d3ee",
+        price: Some(2_500),
+        description: "Turns up rarely, and everyone stops to look.",
+    },
+    Badge {
+        id: "radiance",
+        name: "Radiance",
+        icon: icon!("sparkles"),
+        colour: "#c084fc",
+        price: Some(3_500),
+        description: "Hard to be near without noticing.",
+    },
+    Badge {
+        id: "ascent",
+        name: "Ascent",
+        icon: icon!("rocket"),
+        colour: "#cbd5e1",
+        price: Some(5_000),
+        description: "Only ever pointed one way.",
+    },
 ];
 
 pub fn find(id: &str) -> Option<&'static Badge> {
@@ -171,5 +211,67 @@ mod tests {
         assert_eq!(prices, sorted);
 
         assert!(!purchasable().any(|b| b.id == "veteran"));
+    }
+}
+
+#[cfg(test)]
+mod preview {
+    use super::*;
+    use crate::card::{self, emblem::Emblem, profile};
+
+    #[test]
+    #[ignore = "diagnostic: render the shop's badges onto a card"]
+    fn shop_badges_on_a_card() {
+        let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
+        let accent = card::accent::Accent::default();
+
+        let mut shown: Vec<&'static Badge> = purchasable().collect();
+        shown.reverse();
+        shown.truncate(profile::CAPACITY);
+
+        for badge in &shown {
+            println!(
+                "{:>10}  {:>5} coins  {}",
+                badge.name,
+                badge.price.unwrap_or(0),
+                badge.id
+            );
+        }
+
+        let emblems: Vec<Emblem<'_>> = shown
+            .iter()
+            .map(|badge| Emblem {
+                icon: badge.icon,
+                colour: badge.colour,
+            })
+            .collect();
+
+        let svg = profile::svg(&profile::Profile {
+            name: "yuri",
+            handle: "yuri",
+            accent: &accent,
+            avatar: None,
+            background: None,
+            background_blur: None,
+            guild: profile::Standing {
+                level: 7,
+                rank: 3,
+                experience: 4_900,
+                progress: (940, 1_500),
+            },
+            global: profile::Standing {
+                level: 12,
+                rank: 148,
+                experience: 14_400,
+                progress: (1_900, 2_500),
+            },
+            badges: &emblems,
+            coins: 17_700,
+            currency: "coins",
+        });
+
+        let png =
+            card::render(&svg, profile::WIDTH, profile::HEIGHT, card::SUPERSAMPLE).expect("render");
+        std::fs::write(format!("{dir}/shop-badges.png"), png).expect("write");
     }
 }
