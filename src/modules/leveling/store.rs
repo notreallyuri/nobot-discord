@@ -15,45 +15,131 @@ pub struct RankInfo {
     pub rank: i64,
 }
 
-pub async fn add_xp(db: &PgPool, key: MemberId, amount: i64) -> Result<i64, AppError> {
-    let mut tx = db.begin().await?;
+#[derive(Debug)]
+pub struct XpAward {
+    pub experience: i64,
+    pub granted: i64,
+    pub multiplier_pct: i64,
+}
 
-    let experience = sqlx::query_scalar!(
-        "INSERT INTO guild_member (guild_id, user_id, experience)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (guild_id, user_id)
-         DO UPDATE SET experience = guild_member.experience + $3
-         RETURNING experience",
+pub async fn add_xp(db: &PgPool, key: MemberId, amount: i64) -> Result<XpAward, AppError> {
+    let row = sqlx::query!(
+        r#"WITH boost AS (
+               SELECT COALESCE(MAX(multiplier_pct), 100)::bigint AS pct
+                 FROM user_booster
+                WHERE user_id = $2 AND (expires_at IS NULL OR expires_at > now())
+           ),
+           award AS (
+               SELECT GREATEST($3 * pct / 100, 1) AS xp, pct FROM boost
+           ),
+           guild AS (
+               INSERT INTO guild_member (guild_id, user_id, experience)
+               SELECT $1, $2, xp FROM award
+               ON CONFLICT (guild_id, user_id)
+               DO UPDATE SET experience = guild_member.experience + EXCLUDED.experience
+               RETURNING experience
+           ),
+           global AS (
+               INSERT INTO users (user_id, experience)
+               SELECT $2, xp FROM award
+               ON CONFLICT (user_id)
+               DO UPDATE SET experience = users.experience + EXCLUDED.experience
+               RETURNING 1
+           ),
+           earned AS (
+               INSERT INTO profile (user_id, coins) VALUES ($2, $4)
+               ON CONFLICT (user_id)
+               DO UPDATE SET coins = profile.coins + $4, updated_at = now()
+               RETURNING 1
+           )
+           SELECT (SELECT experience FROM guild) AS "experience!",
+                  (SELECT xp FROM award) AS "granted!",
+                  (SELECT pct FROM award) AS "multiplier_pct!""#,
         key.guild_id,
         key.user_id,
         amount,
+        achievements::COINS_PER_TICK,
+    )
+    .fetch_one(db)
+    .await?;
+
+    Ok(XpAward {
+        experience: row.experience,
+        granted: row.granted,
+        multiplier_pct: row.multiplier_pct,
+    })
+}
+
+#[derive(Debug)]
+pub struct ActiveBooster {
+    pub multiplier_pct: i64,
+    pub expires_at: Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
+}
+
+pub async fn active_booster(db: &PgPool, user_id: i64) -> Result<Option<ActiveBooster>, AppError> {
+    let row = sqlx::query!(
+        r#"SELECT multiplier_pct::bigint AS "multiplier_pct!", expires_at
+             FROM user_booster
+            WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > now())
+            ORDER BY multiplier_pct DESC, expires_at DESC NULLS FIRST
+            LIMIT 1"#,
+        user_id,
+    )
+    .fetch_optional(db)
+    .await?;
+
+    Ok(row.map(|row| ActiveBooster {
+        multiplier_pct: row.multiplier_pct,
+        expires_at: row.expires_at,
+    }))
+}
+
+pub async fn buy_booster(
+    db: &PgPool,
+    user_id: i64,
+    multiplier_pct: i64,
+    seconds: i64,
+    price: i64,
+) -> Result<Purchase, AppError> {
+    let mut tx = db.begin().await?;
+
+    let coins = sqlx::query_scalar!(
+        "SELECT coins FROM profile WHERE user_id = $1 FOR UPDATE",
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or(0);
+
+    if coins < price {
+        return Ok(Purchase::TooPoor {
+            balance: coins,
+            price,
+        });
+    }
+
+    let balance = sqlx::query_scalar!(
+        "UPDATE profile SET coins = coins - $2, updated_at = now()
+         WHERE user_id = $1 RETURNING coins",
+        user_id,
+        price,
     )
     .fetch_one(&mut *tx)
     .await?;
 
     sqlx::query!(
-        "INSERT INTO users (user_id, experience)
-         VALUES ($1, $2)
-         ON CONFLICT (user_id)
-         DO UPDATE SET experience = users.experience + $2",
-        key.user_id,
-        amount
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query!(
-        "INSERT INTO profile (user_id, coins) VALUES ($1, $2)
-         ON CONFLICT (user_id)
-         DO UPDATE SET coins = profile.coins + $2, updated_at = now()",
-        key.user_id,
-        achievements::COINS_PER_TICK,
+        "INSERT INTO user_booster (user_id, multiplier_pct, expires_at)
+         VALUES ($1, $2, now() + make_interval(secs => $3))",
+        user_id,
+        multiplier_pct as i32,
+        seconds as f64,
     )
     .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
-    Ok(experience)
+
+    Ok(Purchase::Bought { balance })
 }
 
 pub async fn guild_rank(db: &PgPool, key: MemberId) -> Result<RankInfo, AppError> {

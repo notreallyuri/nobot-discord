@@ -10,6 +10,7 @@ use std::time::Duration;
 pub mod achievements;
 pub mod backfill;
 pub mod badges;
+pub mod boosters;
 pub mod commands;
 pub mod setup;
 pub mod store;
@@ -85,10 +86,10 @@ async fn on_message(
         return Ok(());
     }
 
-    let amount = config.xp_award();
-    let after = store::add_xp(&data.db, key, amount).await?;
+    let award = store::add_xp(&data.db, key, config.xp_award()).await?;
+    let before = award.experience - award.granted;
 
-    if let Some(level) = setup::xp::leveled_up(after - amount, after) {
+    if let Some(level) = setup::xp::leveled_up(before, award.experience) {
         let unlocked = award_achievements(data, msg.author.id.get() as i64, level)
             .await
             .unwrap_or_else(|e| {

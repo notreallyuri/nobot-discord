@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_booster (user_id, multiplier_pct, expires_at)\n         VALUES ($1, $2, now() + make_interval(secs => $3))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a635a260636335124167e44e0f67b3fbcdca13cdfe72a8ddeb518ca6d6440722"
+}

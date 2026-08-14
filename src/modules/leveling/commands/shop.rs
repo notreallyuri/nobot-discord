@@ -1,7 +1,7 @@
 use crate::{
     Context,
     error::AppError,
-    modules::leveling::{badges, store},
+    modules::leveling::{badges, boosters, store},
 };
 use poise::serenity_prelude as serenity;
 
@@ -48,64 +48,144 @@ pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
         })
         .collect();
 
+    let boosts: Vec<String> = boosters::catalogue()
+        .map(|booster| {
+            let afford = if balance >= booster.price {
+                format!("{} {currency}", booster.price)
+            } else {
+                format!(
+                    "{} {currency} — need {} more",
+                    booster.price,
+                    booster.price - balance
+                )
+            };
+
+            format!(
+                "**{}** · {} · {}\n{}",
+                booster.name,
+                booster.label(),
+                afford,
+                booster.description
+            )
+        })
+        .collect();
+
+    let active = match store::active_booster(db, user_id).await? {
+        Some(booster) => format!(
+            " · {}x active",
+            booster.multiplier_pct as f64 / boosters::NORMAL_PCT as f64
+        ),
+        None => String::new(),
+    };
+
     let embed = serenity::CreateEmbed::new()
-        .title("Badge shop")
-        .description(lines.join("\n\n"))
+        .title("Shop")
+        .description(format!(
+            "**Badges**\n{}\n\n**XP boosters**\n{}",
+            lines.join("\n\n"),
+            boosts.join("\n\n")
+        ))
         .footer(serenity::CreateEmbedFooter::new(format!(
-            "You have {balance} {currency} · buy with /shop buy"
+            "You have {balance} {currency}{active} · buy with /shop buy"
         )));
 
     ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 
+enum Item {
+    Badge(&'static badges::Badge),
+    Booster(&'static boosters::Booster),
+}
+
+impl Item {
+    fn resolve(input: &str) -> Option<Self> {
+        badges::resolve(input)
+            .map(Item::Badge)
+            .or_else(|| boosters::resolve(input).map(Item::Booster))
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Item::Badge(badge) => badge.name,
+            Item::Booster(booster) => booster.name,
+        }
+    }
+}
+
 async fn purchasable_names<'a>(
     _ctx: Context<'a>,
     partial: &'a str,
 ) -> impl Iterator<Item = String> + 'a {
-    badges::purchasable()
+    let names = badges::purchasable()
         .map(|badge| badge.name.to_string())
-        .filter(move |name| name.to_lowercase().contains(&partial.to_lowercase()))
+        .chain(boosters::catalogue().map(|booster| booster.name.to_string()));
+
+    names.filter(move |name| name.to_lowercase().contains(&partial.to_lowercase()))
 }
 
-/// Buy a badge with your coins
+/// Buy a badge or an XP booster with your coins
 #[poise::command(slash_command)]
 pub async fn buy(
     ctx: Context<'_>,
-    #[description = "Which badge to buy"]
+    #[description = "Which badge or booster to buy"]
     #[autocomplete = "purchasable_names"]
-    badge: String,
+    item: String,
 ) -> Result<(), AppError> {
-    let Some(badge) = badges::resolve(&badge) else {
+    let Some(found) = Item::resolve(&item) else {
         return Err(AppError::Message(format!(
-            "There's no badge called `{}`. Try /shop list.",
-            badge.chars().take(30).collect::<String>()
-        )));
-    };
-
-    let Some(price) = badge.price else {
-        return Err(AppError::Message(format!(
-            "**{}** can't be bought — it's earned through achievements.",
-            badge.name
+            "There's nothing called `{}` in the shop. Try /shop list.",
+            item.chars().take(30).collect::<String>()
         )));
     };
 
     let settings = ctx.data().guild_config(guild_of(ctx)?).await;
     let currency = settings.currency();
-
     let user_id = ctx.author().id.get() as i64;
-    let outcome = store::buy_badge(&ctx.data().db, user_id, badge.id, price).await?;
+    let db = &ctx.data().db;
 
+    let (outcome, price, tail) = match found {
+        Item::Badge(badge) => {
+            let Some(price) = badge.price else {
+                return Err(AppError::Message(format!(
+                    "**{}** can't be bought — it's earned through achievements.",
+                    badge.name
+                )));
+            };
+
+            (
+                store::buy_badge(db, user_id, badge.id, price).await?,
+                price,
+                "Equip it with `/badges equip`.".to_string(),
+            )
+        }
+        Item::Booster(booster) => (
+            store::buy_booster(
+                db,
+                user_id,
+                booster.multiplier_pct,
+                booster.duration().as_secs() as i64,
+                booster.price,
+            )
+            .await?,
+            booster.price,
+            format!(
+                "{} for the next {}.",
+                booster.label(),
+                spell_hours(booster.hours)
+            ),
+        ),
+    };
+
+    let name = found.name();
     let message = match outcome {
-        store::Purchase::Bought { balance } => format!(
-            "Bought **{}** for {price} {currency}. {balance} left. Equip it with `/badges equip`.",
-            badge.name
-        ),
-        store::Purchase::AlreadyOwned => format!("You already own **{}**.", badge.name),
-        store::Purchase::TooPoor { balance, price } => format!(
-            "**{}** costs {price} {currency} and you have {balance}.",
-            badge.name
-        ),
+        store::Purchase::Bought { balance } => {
+            format!("Bought **{name}** for {price} {currency}. {balance} left. {tail}")
+        }
+        store::Purchase::AlreadyOwned => format!("You already own **{name}**."),
+        store::Purchase::TooPoor { balance, price } => {
+            format!("**{name}** costs {price} {currency} and you have {balance}.")
+        }
     };
 
     ctx.send(
@@ -116,4 +196,13 @@ pub async fn buy(
     .await?;
 
     Ok(())
+}
+
+fn spell_hours(hours: i64) -> String {
+    match hours {
+        1 => "hour".to_string(),
+        24 => "day".to_string(),
+        h if h % 24 == 0 => format!("{} days", h / 24),
+        h => format!("{h} hours"),
+    }
 }
