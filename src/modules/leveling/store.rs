@@ -76,22 +76,40 @@ pub struct ActiveBooster {
     pub expires_at: Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
 }
 
-pub async fn active_booster(db: &PgPool, user_id: i64) -> Result<Option<ActiveBooster>, AppError> {
+#[derive(Debug)]
+pub struct Purse {
+    pub balance: i64,
+    pub owned: Vec<String>,
+    pub boost: Option<ActiveBooster>,
+}
+
+pub async fn purse(db: &PgPool, user_id: i64) -> Result<Purse, AppError> {
     let row = sqlx::query!(
-        r#"SELECT multiplier_pct::bigint AS "multiplier_pct!", expires_at
-             FROM user_booster
-            WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > now())
-            ORDER BY multiplier_pct DESC, expires_at DESC NULLS FIRST
-            LIMIT 1"#,
+        r#"WITH live AS (
+               SELECT multiplier_pct, expires_at
+                 FROM user_booster
+                WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > now())
+                ORDER BY multiplier_pct DESC, expires_at DESC NULLS FIRST
+                LIMIT 1
+           )
+           SELECT
+               COALESCE((SELECT coins FROM profile WHERE user_id = $1), 0) AS "balance!",
+               ARRAY(SELECT badge_id FROM user_badge WHERE user_id = $1) AS "owned!",
+               (SELECT multiplier_pct::bigint FROM live) AS boost_pct,
+               (SELECT expires_at FROM live) AS boost_until"#,
         user_id,
     )
-    .fetch_optional(db)
+    .fetch_one(db)
     .await?;
 
-    Ok(row.map(|row| ActiveBooster {
-        multiplier_pct: row.multiplier_pct,
-        expires_at: row.expires_at,
-    }))
+    Ok(Purse {
+        balance: row.balance,
+        owned: row.owned,
+        boost: row.boost_pct.map(|multiplier_pct| ActiveBooster {
+            multiplier_pct,
+            expires_at: row.boost_until,
+        }),
+    })
 }
 
 pub async fn buy_booster(
@@ -327,14 +345,6 @@ pub enum Equip {
     NotOwned,
     NoChange,
     TooMany { limit: usize },
-}
-
-pub async fn balance(db: &PgPool, user_id: i64) -> Result<i64, AppError> {
-    let coins = sqlx::query_scalar!("SELECT coins FROM profile WHERE user_id = $1", user_id)
-        .fetch_optional(db)
-        .await?;
-
-    Ok(coins.unwrap_or(0))
 }
 
 pub async fn owned_badges(db: &PgPool, user_id: i64) -> Result<Vec<OwnedBadge>, AppError> {

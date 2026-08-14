@@ -185,38 +185,43 @@ async fn browse_shop(
     data: &Data,
     press: &serenity::ComponentInteraction,
 ) -> Result<(), AppError> {
-    let Some(step) = storefront::parse(&press.data.custom_id) else {
+    let Some((aisle, page)) = storefront::parse(&press.data.custom_id) else {
         return Ok(());
-    };
-
-    let (aisle, page) = match step {
-        storefront::Move::Turn(aisle, page) => (aisle, page),
-        storefront::Move::Switch => {
-            let serenity::ComponentInteractionDataKind::StringSelect { values } = &press.data.kind
-            else {
-                return Ok(());
-            };
-
-            let Some(aisle) = values
-                .first()
-                .and_then(|slug| storefront::Aisle::from_slug(slug))
-            else {
-                return Ok(());
-            };
-
-            (aisle, 0)
-        }
     };
 
     let guild_id = press.guild_id.map_or(0, |id| id.get() as i64);
     let settings = data.guild_config(guild_id).await;
     let wallet = storefront::wallet(&data.db, press.user.id.get() as i64).await?;
-    let shelf = storefront::shelf(aisle, page).await?;
 
-    let response = serenity::CreateInteractionResponseMessage::new()
-        .embed(storefront::embed(aisle, page, &wallet, settings.currency()))
-        .components(storefront::components(aisle, page))
-        .add_file(serenity::CreateAttachment::bytes(shelf, storefront::IMAGE));
+    // The aisle's shelf is already on the message unless the aisle just
+    // changed. Pointing the embed at what Discord hosts keeps a page turn to
+    // one JSON round trip instead of re-uploading the image every press.
+    let name = storefront::shelf_name(aisle);
+    let hosted = press
+        .message
+        .attachments
+        .iter()
+        .find(|attachment| attachment.filename == name)
+        .map(|attachment| attachment.url.clone());
+
+    let image = hosted
+        .clone()
+        .unwrap_or_else(|| storefront::attached(aisle));
+    let mut response = serenity::CreateInteractionResponseMessage::new()
+        .embed(storefront::embed(
+            aisle,
+            page,
+            &wallet,
+            settings.currency(),
+            &image,
+        ))
+        .components(storefront::components(aisle, page));
+
+    if hosted.is_none()
+        && let Some(shelf) = storefront::shelf(aisle).await
+    {
+        response = response.add_file(shelf);
+    }
 
     press
         .create_response(

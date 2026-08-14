@@ -18,8 +18,16 @@ pub struct Cell<'a> {
     pub label: &'a str,
 }
 
+pub const COLUMNS: usize = 6;
+
 pub fn size(count: usize) -> (u32, u32) {
-    ((CELL * count.max(1) as f64) as u32, HEIGHT as u32)
+    let columns = count.clamp(1, COLUMNS);
+    let rows = count.max(1).div_ceil(COLUMNS);
+
+    (
+        (CELL * columns as f64) as u32,
+        (HEIGHT * rows as f64) as u32,
+    )
 }
 
 pub fn svg(cells: &[Cell<'_>]) -> String {
@@ -29,13 +37,16 @@ pub fn svg(cells: &[Cell<'_>]) -> String {
         .iter()
         .enumerate()
         .map(|(i, cell)| {
-            let cx = CELL * (i as f64) + CELL / 2.0;
-            let plate = super::emblem::render(&cell.emblem, i, cx, PLATE_Y, PLATE_R);
+            let (column, row) = (i % COLUMNS, i / COLUMNS);
+            let cx = CELL * (column as f64) + CELL / 2.0;
+            let top = HEIGHT * (row as f64);
+            let plate = super::emblem::render(&cell.emblem, i, cx, top + PLATE_Y, PLATE_R);
             let label = escape(&truncate(cell.label, LABEL_BUDGET));
+            let label_y = top + LABEL_Y;
 
             format!(
                 r##"{plate}
-                    <text x="{cx:.1}" y="{LABEL_Y}" font-family="{FONT_FAMILY}"
+                    <text x="{cx:.1}" y="{label_y:.1}" font-family="{FONT_FAMILY}"
                           font-size="{LABEL_SIZE}" fill="{INK}" text-anchor="middle">{label}</text>"##
             )
         })
@@ -68,10 +79,22 @@ mod tests {
     }
 
     #[test]
-    fn a_strip_widens_with_its_cells() {
-        assert_eq!(size(1).0, CELL as u32);
-        assert_eq!(size(6).0, (CELL * 6.0) as u32);
-        assert_eq!(size(6).1, HEIGHT as u32);
+    fn a_strip_widens_with_its_cells_then_wraps() {
+        assert_eq!(size(1), (CELL as u32, HEIGHT as u32));
+        assert_eq!(size(6), ((CELL * 6.0) as u32, HEIGHT as u32));
+        assert_eq!(size(7), ((CELL * 6.0) as u32, (HEIGHT * 2.0) as u32));
+        assert_eq!(size(18), ((CELL * 6.0) as u32, (HEIGHT * 3.0) as u32));
+    }
+
+    #[test]
+    fn a_wrapped_cell_sits_on_the_next_row() {
+        let svg = svg(&cells(8));
+        let second_row = format!("{:.1}", HEIGHT + LABEL_Y);
+
+        assert!(
+            svg.contains(&second_row),
+            "the seventh cell should drop a row"
+        );
     }
 
     #[test]
@@ -140,7 +163,6 @@ mod preview {
         let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
 
         let badge_cells: Vec<Cell<'_>> = badges::purchasable()
-            .take(6)
             .map(|badge| Cell {
                 emblem: Emblem {
                     icon: badge.icon,

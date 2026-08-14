@@ -8,10 +8,15 @@ use crate::{
     error::AppError,
 };
 use poise::serenity_prelude as serenity;
+use std::sync::OnceLock;
 
 pub const PREFIX: &str = "shop:";
-pub const IMAGE: &str = "shop.png";
 const PAGE_SIZE: usize = 6;
+
+/// One shelf per aisle, rendered once for the life of the process. The catalogue
+/// is static, so these never change, and holding the image steady across a page
+/// turn is what lets a press avoid touching attachments at all.
+static SHELVES: OnceLock<Vec<(String, Vec<u8>)>> = OnceLock::new();
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Aisle {
@@ -31,6 +36,13 @@ impl Aisle {
         match self {
             Aisle::Badges => "Badges",
             Aisle::Boosters => "XP boosters",
+        }
+    }
+
+    fn tab(self) -> &'static str {
+        match self {
+            Aisle::Badges => "Badges",
+            Aisle::Boosters => "Boosters",
         }
     }
 
@@ -63,44 +75,19 @@ pub fn page_id(aisle: Aisle, page: usize) -> String {
     format!("{PREFIX}page:{}:{page}", aisle.slug())
 }
 
-pub fn select_id() -> String {
-    format!("{PREFIX}aisle")
-}
-
 /// Where a press wants to go. The whole position lives in the id, so a shop
 /// posted before a restart still works afterwards.
-pub enum Move {
-    Turn(Aisle, usize),
-    Switch,
+pub fn parse(custom_id: &str) -> Option<(Aisle, usize)> {
+    let rest = custom_id.strip_prefix(PREFIX)?.strip_prefix("page:")?;
+    let (aisle, page) = rest.split_once(':')?;
+
+    Some((Aisle::from_slug(aisle)?, page.parse().ok()?))
 }
 
-pub fn parse(custom_id: &str) -> Option<Move> {
-    let rest = custom_id.strip_prefix(PREFIX)?;
-
-    if rest == "aisle" {
-        return Some(Move::Switch);
-    }
-
-    let (aisle, page) = rest.strip_prefix("page:")?.split_once(':')?;
-    Some(Move::Turn(Aisle::from_slug(aisle)?, page.parse().ok()?))
-}
-
-pub struct Wallet {
-    pub balance: i64,
-    pub owned: Vec<String>,
-    pub boost: Option<store::ActiveBooster>,
-}
+pub type Wallet = store::Purse;
 
 pub async fn wallet(db: &sqlx::PgPool, user_id: i64) -> Result<Wallet, AppError> {
-    Ok(Wallet {
-        balance: store::balance(db, user_id).await?,
-        owned: store::owned_badges(db, user_id)
-            .await?
-            .into_iter()
-            .map(|badge| badge.badge_id)
-            .collect(),
-        boost: store::active_booster(db, user_id).await?,
-    })
+    store::purse(db, user_id).await
 }
 
 fn pages(aisle: Aisle) -> usize {
@@ -130,7 +117,13 @@ fn remaining(boost: &store::ActiveBooster) -> String {
     }
 }
 
-pub fn embed(aisle: Aisle, page: usize, wallet: &Wallet, currency: &str) -> serenity::CreateEmbed {
+pub fn embed(
+    aisle: Aisle,
+    page: usize,
+    wallet: &Wallet,
+    currency: &str,
+    image: &str,
+) -> serenity::CreateEmbed {
     let page = page.min(pages(aisle) - 1);
     let skip = page * PAGE_SIZE;
 
@@ -179,20 +172,21 @@ pub fn embed(aisle: Aisle, page: usize, wallet: &Wallet, currency: &str) -> sere
     serenity::CreateEmbed::new()
         .title(aisle.label())
         .description(format!("{}\n\n{}", aisle.blurb(), body.join("\n\n")))
-        .image(format!("attachment://{IMAGE}"))
+        .image(image)
         .footer(serenity::CreateEmbedFooter::new(footer))
 }
 
-/// A Discord embed carries one image, not one per line, so the page's items are
-/// drawn as a single labelled row in the same order the text lists them.
-pub async fn shelf(aisle: Aisle, page: usize) -> Result<Vec<u8>, AppError> {
-    let page = page.min(pages(aisle) - 1);
-    let skip = page * PAGE_SIZE;
+pub fn shelf_name(aisle: Aisle) -> String {
+    format!("shelf-{}.png", aisle.slug())
+}
 
-    let cells: Vec<Cell<'static>> = match aisle {
+pub fn attached(aisle: Aisle) -> String {
+    format!("attachment://{}", shelf_name(aisle))
+}
+
+fn cells_for(aisle: Aisle) -> Vec<Cell<'static>> {
+    match aisle {
         Aisle::Badges => badges::purchasable()
-            .skip(skip)
-            .take(PAGE_SIZE)
             .map(|badge| Cell {
                 emblem: Emblem {
                     icon: badge.icon,
@@ -202,8 +196,6 @@ pub async fn shelf(aisle: Aisle, page: usize) -> Result<Vec<u8>, AppError> {
             })
             .collect(),
         Aisle::Boosters => boosters::catalogue()
-            .skip(skip)
-            .take(PAGE_SIZE)
             .map(|booster| Cell {
                 emblem: Emblem {
                     icon: booster.icon,
@@ -212,46 +204,88 @@ pub async fn shelf(aisle: Aisle, page: usize) -> Result<Vec<u8>, AppError> {
                 label: booster.name,
             })
             .collect(),
-    };
-
-    let (width, height) = strip::size(cells.len());
-    card::render_async(strip::svg(&cells), width, height, card::SUPERSAMPLE).await
+    }
 }
 
+fn build_shelves() -> Vec<(String, Vec<u8>)> {
+    let mut built = Vec::new();
+
+    for aisle in Aisle::ALL {
+        let cells = cells_for(aisle);
+        let (width, height) = strip::size(cells.len());
+
+        match card::render(&strip::svg(&cells), width, height, card::SUPERSAMPLE) {
+            Ok(png) => built.push((shelf_name(aisle), png)),
+            Err(e) => tracing::warn!(?e, "could not draw a shop shelf"),
+        }
+    }
+
+    built
+}
+
+/// A Discord embed carries one image and no per-line thumbnails, so an aisle
+/// shows all of its wares as a labelled grid. It stays the same across a page
+/// turn on purpose: an unchanged image means the press sends no attachment,
+/// which is the difference between a page turn feeling instant and waiting on
+/// an upload.
+async fn shelves() -> &'static [(String, Vec<u8>)] {
+    if let Some(built) = SHELVES.get() {
+        return built;
+    }
+
+    let built = tokio::task::spawn_blocking(build_shelves)
+        .await
+        .unwrap_or_default();
+
+    SHELVES.get_or_init(|| built)
+}
+
+pub async fn shelf(aisle: Aisle) -> Option<serenity::CreateAttachment> {
+    let name = shelf_name(aisle);
+
+    shelves()
+        .await
+        .iter()
+        .find(|(shelf, _)| *shelf == name)
+        .map(|(shelf, png)| serenity::CreateAttachment::bytes(png.clone(), shelf))
+}
+
+/// Discord gives a select menu a whole action row and will not let buttons
+/// share it, so the aisles are buttons too. Two aisles plus Back and Next is
+/// four of the five a row allows; a third aisle would have to give that up.
 pub fn components(aisle: Aisle, page: usize) -> Vec<serenity::CreateActionRow> {
     let last = pages(aisle) - 1;
     let page = page.min(last);
 
-    let options: Vec<serenity::CreateSelectMenuOption> = Aisle::ALL
+    let mut row: Vec<serenity::CreateButton> = Aisle::ALL
         .iter()
         .map(|entry| {
-            serenity::CreateSelectMenuOption::new(entry.label(), entry.slug())
-                .description(entry.blurb())
-                .default_selection(*entry == aisle)
+            serenity::CreateButton::new(page_id(*entry, 0))
+                .label(entry.tab())
+                .style(if *entry == aisle {
+                    serenity::ButtonStyle::Primary
+                } else {
+                    serenity::ButtonStyle::Secondary
+                })
         })
         .collect();
 
-    let picker = serenity::CreateActionRow::SelectMenu(serenity::CreateSelectMenu::new(
-        select_id(),
-        serenity::CreateSelectMenuKind::String { options },
-    ));
-
-    if last == 0 {
-        return vec![picker];
+    if last > 0 {
+        row.push(
+            serenity::CreateButton::new(page_id(aisle, page.saturating_sub(1)))
+                .label("Back")
+                .style(serenity::ButtonStyle::Secondary)
+                .disabled(page == 0),
+        );
+        row.push(
+            serenity::CreateButton::new(page_id(aisle, (page + 1).min(last)))
+                .label("Next")
+                .style(serenity::ButtonStyle::Secondary)
+                .disabled(page == last),
+        );
     }
 
-    let turn = serenity::CreateActionRow::Buttons(vec![
-        serenity::CreateButton::new(page_id(aisle, page.saturating_sub(1)))
-            .label("Back")
-            .style(serenity::ButtonStyle::Secondary)
-            .disabled(page == 0),
-        serenity::CreateButton::new(page_id(aisle, (page + 1).min(last)))
-            .label("More")
-            .style(serenity::ButtonStyle::Secondary)
-            .disabled(page == last),
-    ]);
-
-    vec![picker, turn]
+    vec![serenity::CreateActionRow::Buttons(row)]
 }
 
 #[cfg(test)]
@@ -263,20 +297,31 @@ mod tests {
         for aisle in Aisle::ALL {
             for page in [0, 1, 7] {
                 let id = page_id(aisle, page);
-                match parse(&id) {
-                    Some(Move::Turn(back, at)) => {
-                        assert_eq!(back.slug(), aisle.slug());
-                        assert_eq!(at, page);
-                    }
-                    _ => panic!("{id} did not parse back to a turn"),
-                }
+                let (back, at) = parse(&id).unwrap_or_else(|| panic!("{id} did not parse"));
+
+                assert_eq!(back.slug(), aisle.slug());
+                assert_eq!(at, page);
             }
         }
     }
 
     #[test]
-    fn the_picker_id_parses_as_a_switch() {
-        assert!(matches!(parse(&select_id()), Some(Move::Switch)));
+    fn every_control_fits_one_row_within_discords_limit() {
+        for aisle in Aisle::ALL {
+            let rows = components(aisle, 0);
+            assert_eq!(rows.len(), 1, "{} should need one row", aisle.label());
+
+            let serenity::CreateActionRow::Buttons(buttons) = &rows[0] else {
+                panic!("a select menu cannot share a row with buttons");
+            };
+
+            assert!(
+                buttons.len() <= 5,
+                "{} needs {} buttons, more than a row holds",
+                aisle.label(),
+                buttons.len()
+            );
+        }
     }
 
     #[test]
@@ -322,7 +367,7 @@ mod tests {
             boost: None,
         };
 
-        let embed = embed(Aisle::Badges, 99, &wallet, "coins");
+        let embed = embed(Aisle::Badges, 99, &wallet, "coins", "attachment://x.png");
         let rendered = format!("{embed:?}");
 
         assert!(
@@ -333,7 +378,15 @@ mod tests {
 
     #[test]
     fn a_single_page_aisle_offers_no_turn_buttons() {
-        assert_eq!(components(Aisle::Boosters, 0).len(), 1);
-        assert_eq!(components(Aisle::Badges, 0).len(), 2);
+        let one_page = components(Aisle::Boosters, 0);
+        let many_pages = components(Aisle::Badges, 0);
+
+        let count = |rows: &[serenity::CreateActionRow]| match &rows[0] {
+            serenity::CreateActionRow::Buttons(buttons) => buttons.len(),
+            _ => panic!("expected buttons"),
+        };
+
+        assert_eq!(count(&one_page), Aisle::ALL.len());
+        assert_eq!(count(&many_pages), Aisle::ALL.len() + 2);
     }
 }

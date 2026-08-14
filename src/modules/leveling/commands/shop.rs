@@ -25,16 +25,22 @@ pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
     let wallet = storefront::wallet(&ctx.data().db, user_id).await?;
 
     let aisle = storefront::Aisle::Badges;
-    let shelf = storefront::shelf(aisle, 0).await?;
+    let mut reply = poise::CreateReply::default()
+        .ephemeral(true)
+        .embed(storefront::embed(
+            aisle,
+            0,
+            &wallet,
+            settings.currency(),
+            &storefront::attached(aisle),
+        ))
+        .components(storefront::components(aisle, 0));
 
-    ctx.send(
-        poise::CreateReply::default()
-            .ephemeral(true)
-            .embed(storefront::embed(aisle, 0, &wallet, settings.currency()))
-            .components(storefront::components(aisle, 0))
-            .attachment(serenity::CreateAttachment::bytes(shelf, storefront::IMAGE)),
-    )
-    .await?;
+    if let Some(shelf) = storefront::shelf(aisle).await {
+        reply = reply.attachment(shelf);
+    }
+
+    ctx.send(reply).await?;
 
     Ok(())
 }
