@@ -85,11 +85,54 @@ feature itself ships. Items with no nested line need no schema change.
     channels mean welcomes and farewells can run independently.
 - [ ] Logging (message edits/deletes, joins/leaves)
   - [ ] db — `guild_config.log_channel_id`
-- [ ] Auto-moderation (spam/link filtering) — **scope not defined yet**
-  - Needs both fixed toggles and user-defined rules, so it will want
-    `guild_config` columns *and* an `automod_rule` table. Schema stays unwritten
-    until the rule model is decided (what can be matched, what actions exist,
-    how exemptions work).
+- [ ] Auto-moderation — **scope decided, not built**
+  - **Discord's native AutoMod, managed through its API — not our own matcher.**
+    The bot creates and edits rules; Discord enforces them server-side.
+  - **No schema at all.** This supersedes the earlier plan for `guild_config`
+    columns plus an `automod_rule` table. Discord stores the rules, the alert
+    channel and the exemptions, so it is the source of truth and there is
+    nothing to migrate or keep in sync. Our rules are found by re-reading
+    `guild_id.automod_rules()`, which cannot drift the way stored ids would.
+  - Why not a bot-side matcher:
+    - It would need the **Message Content** privileged intent — a portal toggle
+      now and Discord verification past 100 guilds. The bot runs on
+      `non_privileged()` today and has never read `msg.content`; the XP path
+      only counts messages. Same trap `MEMBER_INTENT` already documents.
+    - Discord enforces even while the bot is down, with no gap and no latency.
+    - No message text ever reaches our process, so nothing to store or leak.
+    - The profanity, sexual-content and slur wordsets are Discord's to maintain.
+  - The trade: the rule model is Discord's. We configure what it offers rather
+    than inventing matchers. Everything below fits inside it.
+  - Coverage decided, and how each maps onto a trigger:
+
+    | Want | Trigger | Notes |
+    |------|---------|-------|
+    | Profanity / slurs | `KeywordPreset` | `Profanity`, `SexualContent`, `Slurs` + an allow list |
+    | Custom words | `Keyword` | `strings` with wildcards, plus `allow_list` |
+    | Links and invites | `Keyword` | No native link trigger — use `regex_patterns`, allow list for permitted domains |
+    | Spam / flooding | `Spam` | No metadata; Discord decides what spam is |
+    | Mass mentions | `MentionSpam` | `mention_total_limit`, max 50 |
+
+  - Per-guild rule limits are the real design constraint: `Keyword` allows 6,
+    while `Spam`, `KeywordPreset` and `MentionSpam` allow **1 each**. Custom
+    words, links and invites therefore want to be separate `Keyword` rules
+    (3 of the 6), and the single-instance triggers cannot be split per channel.
+  - Actions are `BlockMessage { custom_message }`, `Alert(ChannelId)` and
+    `Timeout(Duration)`. **`Timeout` only attaches to `Keyword` rules** and needs
+    `MODERATE_MEMBERS`, so spam, preset and mention rules can only block and
+    alert. Do not design a UI that offers timeout everywhere.
+  - Verified in serenity 0.12.5: the `Rule` model, `edit_automod_rule`, and all
+    four gateway events including `AutoModActionExecution` — which is what feeds
+    the logging item above without needing message content.
+  - Commands want `MANAGE_GUILD`, following the gating `/config` already uses.
+  - Still open before building:
+    - The command surface. A `/automod` parent with subcommands per trigger fits
+      how `/config`, `/badges` and `/rolemenu` are already shaped.
+    - Whether the alert channel is set once for every rule or per rule. Discord
+      allows per rule; one setting is simpler and probably what people want.
+    - Serenity 0.12.5's `MentionSpam` exposes only `mention_total_limit`, not
+      Discord's newer mention-raid flag, so raid protection is not reachable
+      through this path without going around the model.
 - [x] Self-assignable roles — `/rolemenu create · add · remove · list · delete`
   - [x] db — `0010_role_menus`: `role_menu` + `role_menu_option`
   - Built on an embed with a select menu rather than reactions: labels and
@@ -150,8 +193,11 @@ feature itself ships. Items with no nested line need no schema change.
 ## Migration Order
 
 `guild_config` first: it unblocks DJ roles, 24/7 mode, welcome messages, logging,
-auto-moderation, and the "disable economy / custom currency" settings. Everything
-else is independent and can land in any order.
+and the "disable economy / custom currency" settings. Everything else is
+independent and can land in any order.
+
+Auto-moderation is no longer on this list. Going through Discord's own AutoMod
+means Discord holds the rules, so that feature needs no migration at all.
 
 | # | Migration | Unblocks |
 |---|-----------|----------|
