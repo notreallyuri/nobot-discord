@@ -89,6 +89,14 @@ pub const BADGES: &[Badge] = &[
         description: "Grew on everyone.",
     },
     Badge {
+        id: "evergreen",
+        name: "Evergreen",
+        icon: icon!("leaf"),
+        colour: "#4ade80",
+        price: Some(900),
+        description: "Still here, season after season.",
+    },
+    Badge {
         id: "command",
         name: "Operator",
         icon: icon!("command"),
@@ -105,12 +113,28 @@ pub const BADGES: &[Badge] = &[
         description: "Rules with a light touch.",
     },
     Badge {
+        id: "quill",
+        name: "Quill",
+        icon: icon!("feather"),
+        colour: "#a5b4fc",
+        price: Some(1_500),
+        description: "Says it better than the rest of us.",
+    },
+    Badge {
         id: "flame",
         name: "Wildfire",
         icon: icon!("flame"),
         colour: "#f97316",
         price: Some(1_800),
         description: "Impossible to ignore.",
+    },
+    Badge {
+        id: "anchor",
+        name: "Anchor",
+        icon: icon!("anchor"),
+        colour: "#0ea5e9",
+        price: Some(2_000),
+        description: "What the server steadies itself on.",
     },
     Badge {
         id: "eclipse",
@@ -121,6 +145,14 @@ pub const BADGES: &[Badge] = &[
         description: "Turns up rarely, and everyone stops to look.",
     },
     Badge {
+        id: "frost",
+        name: "Frostbite",
+        icon: icon!("snowflake"),
+        colour: "#7dd3fc",
+        price: Some(3_000),
+        description: "Unbothered, and a little cold about it.",
+    },
+    Badge {
         id: "radiance",
         name: "Radiance",
         icon: icon!("sparkles"),
@@ -129,12 +161,28 @@ pub const BADGES: &[Badge] = &[
         description: "Hard to be near without noticing.",
     },
     Badge {
+        id: "duelist",
+        name: "Duelist",
+        icon: icon!("swords"),
+        colour: "#f87171",
+        price: Some(4_200),
+        description: "Has never once left an argument early.",
+    },
+    Badge {
         id: "ascent",
         name: "Ascent",
         icon: icon!("rocket"),
         colour: "#cbd5e1",
         price: Some(5_000),
         description: "Only ever pointed one way.",
+    },
+    Badge {
+        id: "paragon",
+        name: "Paragon",
+        icon: icon!("trophy"),
+        colour: "#f59e0b",
+        price: Some(7_500),
+        description: "There is no tier above this one.",
     },
 ];
 
@@ -183,7 +231,17 @@ mod tests {
             assert!(!body.is_empty(), "{} has an empty icon", badge.id);
             assert!(!body.contains("<svg"), "{} kept its wrapper", badge.id);
             assert!(
-                body.contains("<path") || body.contains("<circle"),
+                [
+                    "<path",
+                    "<circle",
+                    "<line",
+                    "<polyline",
+                    "<polygon",
+                    "<rect",
+                    "<ellipse"
+                ]
+                .iter()
+                .any(|shape| body.contains(shape)),
                 "{} has no drawable elements",
                 badge.id
             );
@@ -225,9 +283,19 @@ mod preview {
         let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
         let accent = card::accent::Accent::default();
 
-        let mut shown: Vec<&'static Badge> = purchasable().collect();
-        shown.reverse();
-        shown.truncate(profile::CAPACITY);
+        let shown: Vec<&'static Badge> = match std::env::var("BADGE_IDS") {
+            Ok(ids) => ids
+                .split(',')
+                .filter_map(|id| find(id.trim()))
+                .take(profile::CAPACITY)
+                .collect(),
+            Err(_) => {
+                let mut dearest: Vec<&'static Badge> = purchasable().collect();
+                dearest.reverse();
+                dearest.truncate(profile::CAPACITY);
+                dearest
+            }
+        };
 
         for badge in &shown {
             println!(
