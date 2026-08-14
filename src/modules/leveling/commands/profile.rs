@@ -59,6 +59,7 @@ pub async fn profile(
 
     let svg = card::profile::svg(&card::profile::Profile {
         name: target.display_name(),
+        handle: &target.name,
         accent: &accent,
         avatar: avatar.as_deref(),
         background: background.as_deref(),
@@ -70,7 +71,13 @@ pub async fn profile(
         currency: settings.currency(),
     });
 
-    let png = card::render_async(svg, card::profile::WIDTH, card::profile::HEIGHT).await?;
+    let png = card::render_async(
+        svg,
+        card::profile::WIDTH,
+        card::profile::HEIGHT,
+        card::SUPERSAMPLE,
+    )
+    .await?;
 
     ctx.send(
         poise::CreateReply::default()

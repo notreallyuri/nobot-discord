@@ -131,6 +131,8 @@ pub fn prepare_bytes(bytes: &[u8]) -> Result<Prepared, AppError> {
     })
 }
 
+const BLUR_SCALE: u32 = 4;
+
 fn blur(card: &image::DynamicImage) -> Result<Vec<u8>, AppError> {
     const DIVISOR: u32 = 14;
 
@@ -141,8 +143,8 @@ fn blur(card: &image::DynamicImage) -> Result<Vec<u8>, AppError> {
     );
 
     encode(&small.resize_exact(
-        card.width(),
-        card.height(),
+        (card.width() / BLUR_SCALE).max(1),
+        (card.height() / BLUR_SCALE).max(1),
         image::imageops::FilterType::Triangle,
     ))
 }
@@ -179,8 +181,8 @@ fn normalise(bytes: &[u8]) -> Result<image::DynamicImage, AppError> {
     })?;
 
     let resized = decoded.resize_to_fill(
-        profile::WIDTH,
-        profile::HEIGHT,
+        profile::PIXEL_WIDTH,
+        profile::PIXEL_HEIGHT,
         image::imageops::FilterType::Lanczos3,
     );
 
@@ -192,17 +194,21 @@ pub fn data_uri(image: &[u8]) -> String {
 }
 
 pub fn fit_to_card(stored: Vec<u8>) -> Vec<u8> {
+    if let Ok(reader) = ImageReader::new(Cursor::new(&stored)).with_guessed_format()
+        && let Ok((width, height)) = reader.into_dimensions()
+        && width == profile::PIXEL_WIDTH
+        && height == profile::PIXEL_HEIGHT
+    {
+        return stored;
+    }
+
     let Ok(decoded) = image::load_from_memory(&stored) else {
         return stored;
     };
 
-    if decoded.width() == profile::WIDTH && decoded.height() == profile::HEIGHT {
-        return stored;
-    }
-
     let resized = decoded.resize_to_fill(
-        profile::WIDTH,
-        profile::HEIGHT,
+        profile::PIXEL_WIDTH,
+        profile::PIXEL_HEIGHT,
         image::imageops::FilterType::Lanczos3,
     );
 
@@ -226,7 +232,7 @@ pub async fn uris_for_card(
         let sharp = sharp.map(fit_to_card);
 
         let blurred = match blurred {
-            Some(bytes) => Some(fit_to_card(bytes)),
+            Some(bytes) => Some(bytes),
             None => sharp.as_deref().and_then(derive_blur),
         };
 
@@ -344,19 +350,48 @@ mod tests {
     fn normalises_to_card_dimensions() {
         let out = prepare_bytes(&checkerboard()).expect("should normalise");
 
-        for (label, bytes) in [("sharp", &out.sharp), ("blurred", &out.blurred)] {
-            let decoded = image::load_from_memory(bytes).expect("valid jpeg");
-            assert_eq!(decoded.width(), profile::WIDTH, "{label} width");
-            assert_eq!(decoded.height(), profile::HEIGHT, "{label} height");
-        }
+        let sharp = image::load_from_memory(&out.sharp).expect("valid jpeg");
+        assert_eq!(sharp.width(), profile::PIXEL_WIDTH, "sharp width");
+        assert_eq!(sharp.height(), profile::PIXEL_HEIGHT, "sharp height");
+
+        let blurred = image::load_from_memory(&out.blurred).expect("valid jpeg");
+        assert_eq!(
+            blurred.width(),
+            profile::PIXEL_WIDTH / BLUR_SCALE,
+            "blurred width"
+        );
+        assert_eq!(
+            blurred.height(),
+            profile::PIXEL_HEIGHT / BLUR_SCALE,
+            "blurred height"
+        );
+
+        assert!(
+            out.blurred.len() * 4 < out.sharp.len(),
+            "the blurred copy should be a fraction of the sharp one: {} vs {} bytes",
+            out.blurred.len(),
+            out.sharp.len()
+        );
     }
 
     #[test]
     fn the_blurred_copy_loses_its_detail() {
         let out = prepare_bytes(&checkerboard()).expect("should normalise");
 
+        let scaled_up = image::load_from_memory(&out.blurred)
+            .expect("valid jpeg")
+            .resize_exact(
+                profile::PIXEL_WIDTH,
+                profile::PIXEL_HEIGHT,
+                image::imageops::FilterType::Triangle,
+            );
+        let mut scaled_bytes = Vec::new();
+        scaled_up
+            .write_to(&mut Cursor::new(&mut scaled_bytes), image::ImageFormat::Png)
+            .expect("re-encode");
+
         let sharp = detail(&out.sharp);
-        let blurred = detail(&out.blurred);
+        let blurred = detail(&scaled_bytes);
 
         assert!(
             blurred < sharp * 0.25,

@@ -1,6 +1,6 @@
 use crate::modules::leveling::card::accent::{self, Rgb};
 
-pub const MAX_EQUIPPED: usize = 6;
+pub const MAX_EQUIPPED: usize = 8;
 
 pub struct Badge {
     pub id: &'static str,

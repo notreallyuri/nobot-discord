@@ -54,3 +54,6 @@ rand = { version = "0.9", default-features = false, features = ["std", "std_rng"
 
 [dev-dependencies]
 async-trait = "0.1"
+
+[profile.dev.package."*"]
+opt-level = 3

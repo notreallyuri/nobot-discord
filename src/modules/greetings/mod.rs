@@ -149,7 +149,14 @@ async fn render_card(
         leaving,
     });
 
-    match card::render_async(svg, card::welcome::WIDTH, card::welcome::HEIGHT).await {
+    match card::render_async(
+        svg,
+        card::welcome::WIDTH,
+        card::welcome::HEIGHT,
+        card::SUPERSAMPLE,
+    )
+    .await
+    {
         Ok(png) => Some(png),
         Err(e) => {
             tracing::warn!(?e, "couldn't render the greeting card");

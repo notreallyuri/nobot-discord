@@ -20,7 +20,7 @@ const NOTO_SANS_BOLD: &[u8] = include_bytes!("../../../../assets/fonts/NotoSans-
 const NOTO_CJK: &[u8] = include_bytes!("../../../../assets/fonts/NotoSansCJK-Regular.ttc");
 
 pub const FONT_FAMILY: &str = "Figtree";
-const AVATAR_PIXELS: u32 = 128;
+const AVATAR_PIXELS: u32 = 256;
 
 fn fonts() -> Arc<fontdb::Database> {
     static FONTS: OnceLock<Arc<fontdb::Database>> = OnceLock::new();
@@ -38,7 +38,14 @@ fn fonts() -> Arc<fontdb::Database> {
     }))
 }
 
-fn rasterise(svg: &str, width: u32, height: u32) -> Result<tiny_skia::Pixmap, AppError> {
+pub const SUPERSAMPLE: u32 = 2;
+
+fn rasterise(
+    svg: &str,
+    width: u32,
+    height: u32,
+    scale: u32,
+) -> Result<tiny_skia::Pixmap, AppError> {
     let options = usvg::Options {
         fontdb: fonts(),
         ..Default::default()
@@ -47,26 +54,60 @@ fn rasterise(svg: &str, width: u32, height: u32) -> Result<tiny_skia::Pixmap, Ap
     let tree = usvg::Tree::from_str(svg, &options)
         .map_err(|e| AppError::Message(format!("Couldn't build the card: {e}")))?;
 
-    let mut pixmap = tiny_skia::Pixmap::new(width, height)
+    let mut pixmap = tiny_skia::Pixmap::new(width * scale, height * scale)
         .ok_or_else(|| AppError::Message("Card dimensions are invalid.".into()))?;
 
     resvg::render(
         &tree,
-        tiny_skia::Transform::identity(),
+        tiny_skia::Transform::from_scale(scale as f32, scale as f32),
         &mut pixmap.as_mut(),
     );
 
     Ok(pixmap)
 }
 
-pub fn render(svg: &str, width: u32, height: u32) -> Result<Vec<u8>, AppError> {
-    rasterise(svg, width, height)?
-        .encode_png()
-        .map_err(|e| AppError::Message(format!("Couldn't encode the card: {e}")))
+fn straight_rgba(pixmap: &tiny_skia::Pixmap) -> Vec<u8> {
+    let mut rgba = vec![0u8; pixmap.data().len()];
+
+    for (out, pixel) in rgba.chunks_exact_mut(4).zip(pixmap.pixels()) {
+        let colour = pixel.demultiply();
+        out.copy_from_slice(&[colour.red(), colour.green(), colour.blue(), colour.alpha()]);
+    }
+
+    rgba
 }
 
-pub async fn render_async(svg: String, width: u32, height: u32) -> Result<Vec<u8>, AppError> {
-    tokio::task::spawn_blocking(move || render(&svg, width, height))
+pub fn render(svg: &str, width: u32, height: u32, scale: u32) -> Result<Vec<u8>, AppError> {
+    let pixmap = rasterise(svg, width, height, scale)?;
+
+    let rgba = straight_rgba(&pixmap);
+
+    let mut out = Vec::new();
+    let encoder = image::codecs::png::PngEncoder::new_with_quality(
+        &mut out,
+        image::codecs::png::CompressionType::Fast,
+        image::codecs::png::FilterType::Adaptive,
+    );
+
+    image::ImageEncoder::write_image(
+        encoder,
+        &rgba,
+        pixmap.width(),
+        pixmap.height(),
+        image::ExtendedColorType::Rgba8,
+    )
+    .map_err(|e| AppError::Message(format!("Couldn't encode the card: {e}")))?;
+
+    Ok(out)
+}
+
+pub async fn render_async(
+    svg: String,
+    width: u32,
+    height: u32,
+    scale: u32,
+) -> Result<Vec<u8>, AppError> {
+    tokio::task::spawn_blocking(move || render(&svg, width, height, scale))
         .await
         .map_err(|_| AppError::Message("Card rendering panicked.".into()))?
 }
@@ -252,6 +293,7 @@ mod render_tests {
         let custom = accent::Accent::new(accent::Rgb(0x22, 0xcc, 0x88));
         let profile = profile::svg(&profile::Profile {
             name: "日本語のユーザー",
+            handle: "nihongo_user",
             accent: &custom,
             avatar: None,
             background: None,
@@ -284,7 +326,7 @@ mod render_tests {
         ];
 
         for (name, svg, width, height) in cards {
-            let png = render(&svg, width, height).expect("card should rasterise");
+            let png = render(&svg, width, height, 1).expect("card should rasterise");
 
             assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n", "{name} is not a PNG");
             assert!(
@@ -297,7 +339,7 @@ mod render_tests {
                 std::fs::write(format!("{dir}/{name}.png"), &png).expect("dump");
             }
 
-            let pixmap = rasterise(&svg, width, height).expect("card should rasterise");
+            let pixmap = rasterise(&svg, width, height, 1).expect("card should rasterise");
             for (label, x, y) in [
                 ("top-left", 0, 0),
                 ("top-right", width - 1, 0),
@@ -331,6 +373,7 @@ mod background_render_tests {
 
         let svg = profile::svg(&profile::Profile {
             name: "yuri",
+            handle: "yuri",
             accent: &accent::Accent::default(),
             avatar: None,
             background: Some(&uri),
@@ -353,13 +396,13 @@ mod background_render_tests {
         });
 
         let pixmap =
-            rasterise(&svg, profile::WIDTH, profile::HEIGHT).expect("card should rasterise");
+            rasterise(&svg, profile::WIDTH, profile::HEIGHT, 1).expect("card should rasterise");
 
         for (label, x, y) in [
-            ("identity rail", 60, 260),
-            ("server panel", 500, 100),
-            ("global panel", 620, 226),
-            ("badges panel", 650, 310),
+            ("identity header", 300, 45),
+            ("stats panel", 320, 230),
+            ("stats footer", 300, 500),
+            ("badges rail", 500, 240),
         ] {
             let pixel = pixmap.pixel(x, y).expect("in bounds");
             assert!(
@@ -378,7 +421,7 @@ mod background_render_tests {
         );
 
         if let Ok(dir) = std::env::var("CARD_DUMP") {
-            let png = render(&svg, profile::WIDTH, profile::HEIGHT).expect("encode");
+            let png = render(&svg, profile::WIDTH, profile::HEIGHT, 1).expect("encode");
             std::fs::write(format!("{dir}/profile-bg.png"), png).expect("dump");
         }
     }
@@ -408,7 +451,7 @@ mod badge_closeup {
               <rect width="820" height="160" fill="#1b1f2b"/>{plates}</svg>"##
         );
 
-        let png = render(&svg, 820, 160).expect("render");
+        let png = render(&svg, 820, 160, 1).expect("render");
         let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
         std::fs::write(format!("{dir}/badges-large.png"), png).expect("write");
     }
@@ -437,7 +480,7 @@ mod levelup_widths {
                 from: if i == 3 { 99 } else { 9 },
                 to: if i == 3 { 100 } else { 10 },
             });
-            let png = render(&svg, levelup::WIDTH, levelup::HEIGHT).expect("render");
+            let png = render(&svg, levelup::WIDTH, levelup::HEIGHT, 1).expect("render");
             let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
             std::fs::write(format!("{dir}/levelup-{i}.png"), png).expect("write");
         }
@@ -463,7 +506,7 @@ mod blur_probe {
           <rect x="120" y="20" width="60" height="60" fill="#ffffff" filter="url(#b)"/>
         </svg>"##;
 
-        let pixmap = rasterise(svg, 200, 100).expect("render");
+        let pixmap = rasterise(svg, 200, 100, 1).expect("render");
 
         let sharp_outside = pixmap.pixel(6, 50).expect("in bounds").red();
         let blurred_outside = pixmap.pixel(116, 50).expect("in bounds").red();
@@ -774,10 +817,129 @@ mod layout_prototype {
         let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
 
         for spec in VARIANTS {
-            let png = render(&build(spec, &accent), spec.width as u32, spec.height as u32)
-                .expect("render");
+            let png = render(
+                &build(spec, &accent),
+                spec.width as u32,
+                spec.height as u32,
+                1,
+            )
+            .expect("render");
             std::fs::write(format!("{dir}/var-{}.png", spec.name), png).expect("write");
             println!("{}: {}x{}", spec.name, spec.width, spec.height);
+        }
+    }
+}
+
+#[cfg(test)]
+mod timing {
+    use super::*;
+    use std::time::Instant;
+
+    fn ms(label: &str, start: Instant) {
+        println!(
+            "{label:<38} {:>8.1} ms",
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+
+    #[test]
+    #[ignore = "diagnostic: where does a profile render spend its time"]
+    fn profile_render_breakdown() {
+        let source = image::RgbImage::from_fn(2000, 1200, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
+        });
+        let mut encoded = Vec::new();
+        image::DynamicImage::ImageRgb8(source)
+            .write_to(
+                &mut std::io::Cursor::new(&mut encoded),
+                image::ImageFormat::Png,
+            )
+            .expect("encode source");
+
+        let start = Instant::now();
+        let prepared = background::prepare_bytes(&encoded).expect("normalise");
+        ms("background::prepare_bytes (upload)", start);
+
+        let start = Instant::now();
+        let refit = background::fit_to_card(prepared.sharp.clone());
+        ms("fit_to_card (already correct size)", start);
+
+        let stale = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            760,
+            380,
+            image::Rgb([120, 90, 200]),
+        ));
+        let mut stale_bytes = Vec::new();
+        stale
+            .write_to(
+                &mut std::io::Cursor::new(&mut stale_bytes),
+                image::ImageFormat::Jpeg,
+            )
+            .expect("encode stale");
+
+        let start = Instant::now();
+        let _ = background::fit_to_card(stale_bytes.clone());
+        ms("fit_to_card (stale size, resizes)", start);
+
+        let start = Instant::now();
+        let sharp = background::data_uri(&refit);
+        let blurred = background::data_uri(&prepared.blurred);
+        ms("data_uri x2 (base64)", start);
+
+        let accent = accent::Accent::default();
+        let build = || {
+            profile::svg(&profile::Profile {
+                name: "yuri",
+                handle: "yuri",
+                accent: &accent,
+                avatar: None,
+                background: Some(&sharp),
+                background_blur: Some(&blurred),
+                guild: profile::Standing {
+                    level: 7,
+                    rank: 3,
+                    experience: 4_900,
+                    progress: (940, 1_500),
+                },
+                global: profile::Standing {
+                    level: 12,
+                    rank: 148,
+                    experience: 14_400,
+                    progress: (1_900, 2_500),
+                },
+                badges: &[],
+                coins: 1_240,
+                currency: "coins",
+            })
+        };
+
+        let start = Instant::now();
+        let svg = build();
+        ms("profile::svg (includes fit_name)", start);
+        println!("{:<38} {:>8} KB", "svg payload", svg.len() / 1024);
+
+        for scale in [1, SUPERSAMPLE] {
+            let start = Instant::now();
+            let pixmap = rasterise(&svg, profile::WIDTH, profile::HEIGHT, scale).expect("render");
+            ms(&format!("rasterise @{scale}x"), start);
+
+            let start = Instant::now();
+            let baseline = pixmap.encode_png().expect("png");
+            ms(&format!("  tiny_skia encode_png @{scale}x"), start);
+            println!(
+                "{:<38} {:>8} KB",
+                format!("  tiny_skia png @{scale}x"),
+                baseline.len() / 1024
+            );
+
+            let start = Instant::now();
+            let png = render(&svg, profile::WIDTH, profile::HEIGHT, scale).expect("render");
+            ms(&format!("  render() end to end @{scale}x"), start);
+            println!(
+                "{:<38} {:>8} KB",
+                format!("  render() png @{scale}x"),
+                png.len() / 1024
+            );
         }
     }
 }

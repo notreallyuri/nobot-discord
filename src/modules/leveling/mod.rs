@@ -144,7 +144,13 @@ async fn announce_level_up(
         to: level,
     });
 
-    let png = card::render_async(svg, card::levelup::WIDTH, card::levelup::HEIGHT).await?;
+    let png = card::render_async(
+        svg,
+        card::levelup::WIDTH,
+        card::levelup::HEIGHT,
+        card::SUPERSAMPLE,
+    )
+    .await?;
 
     let mut content = format!("<@{}>", msg.author.id);
     for achievement in unlocked {

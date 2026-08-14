@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn both_greetings_rasterise() {
         for leaving in [false, true] {
-            let png = render(&card(leaving), WIDTH, HEIGHT).expect("should rasterise");
+            let png = render(&card(leaving), WIDTH, HEIGHT, 1).expect("should rasterise");
 
             assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
             assert!(png.len() > 2_000, "looks blank ({} bytes)", png.len());
