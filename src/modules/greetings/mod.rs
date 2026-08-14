@@ -1,9 +1,8 @@
 use crate::{
-    HttpKey,
+    HttpKey, card,
     data::Data,
     guild_config::GuildConfig,
     module::{EventFuture, Module},
-    modules::leveling::card,
 };
 use poise::serenity_prelude as serenity;
 

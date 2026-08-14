@@ -7,6 +7,7 @@ use songbird::SerenityInit;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 
+pub mod card;
 pub mod config;
 pub mod data;
 pub mod error;

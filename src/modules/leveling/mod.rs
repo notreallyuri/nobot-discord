@@ -1,5 +1,5 @@
 use crate::{
-    HttpKey,
+    HttpKey, card,
     data::{Data, MemberId},
     error::AppError,
     module::{EventFuture, Module},
@@ -10,7 +10,6 @@ use std::time::Duration;
 pub mod achievements;
 pub mod backfill;
 pub mod badges;
-pub mod card;
 pub mod commands;
 pub mod setup;
 pub mod store;

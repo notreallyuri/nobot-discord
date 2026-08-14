@@ -9,15 +9,16 @@ use std::sync::{Arc, OnceLock};
 
 pub mod accent;
 pub mod background;
+pub mod emblem;
 pub mod levelup;
 pub mod profile;
 pub mod welcome;
 
-const FIGTREE: &[u8] = include_bytes!("../../../../assets/fonts/Figtree-Regular.ttf");
-const FIGTREE_BOLD: &[u8] = include_bytes!("../../../../assets/fonts/Figtree-Bold.ttf");
-const NOTO_SANS: &[u8] = include_bytes!("../../../../assets/fonts/NotoSans-Regular.ttf");
-const NOTO_SANS_BOLD: &[u8] = include_bytes!("../../../../assets/fonts/NotoSans-Bold.ttf");
-const NOTO_CJK: &[u8] = include_bytes!("../../../../assets/fonts/NotoSansCJK-Regular.ttc");
+const FIGTREE: &[u8] = include_bytes!("../../assets/fonts/Figtree-Regular.ttf");
+const FIGTREE_BOLD: &[u8] = include_bytes!("../../assets/fonts/Figtree-Bold.ttf");
+const NOTO_SANS: &[u8] = include_bytes!("../../assets/fonts/NotoSans-Regular.ttf");
+const NOTO_SANS_BOLD: &[u8] = include_bytes!("../../assets/fonts/NotoSans-Bold.ttf");
+const NOTO_CJK: &[u8] = include_bytes!("../../assets/fonts/NotoSansCJK-Regular.ttc");
 
 pub const FONT_FAMILY: &str = "Figtree";
 const AVATAR_PIXELS: u32 = 256;
@@ -279,6 +280,8 @@ mod tests {
 mod render_tests {
     use super::*;
 
+    const ICON: &str = r#"<svg viewBox="0 0 24 24"><path d="M4 12 L12 4 L20 12 Z"/></svg>"#;
+
     #[test]
     fn both_cards_rasterise() {
         let accent = accent::Accent::default();
@@ -311,10 +314,22 @@ mod render_tests {
                 progress: (1_900, 2_500),
             },
             badges: &[
-                crate::modules::leveling::badges::find("veteran").expect("veteran"),
-                crate::modules::leveling::badges::find("melody").expect("melody"),
-                crate::modules::leveling::badges::find("peak").expect("peak"),
-                crate::modules::leveling::badges::find("heart").expect("heart"),
+                emblem::Emblem {
+                    icon: ICON,
+                    colour: "#fbbf24",
+                },
+                emblem::Emblem {
+                    icon: ICON,
+                    colour: "#a78bfa",
+                },
+                emblem::Emblem {
+                    icon: ICON,
+                    colour: "#34d399",
+                },
+                emblem::Emblem {
+                    icon: ICON,
+                    colour: "#fb7185",
+                },
             ],
             coins: 1_240,
             currency: "coins",
@@ -428,36 +443,6 @@ mod background_render_tests {
 }
 
 #[cfg(test)]
-mod badge_closeup {
-    use super::*;
-    use crate::modules::leveling::badges;
-
-    #[test]
-    #[ignore = "diagnostic: render badges large for a visual check"]
-    fn large_badges() {
-        let ids = ["veteran", "elder", "legend", "melody", "sun", "bloom"];
-        let plates: String = ids
-            .iter()
-            .enumerate()
-            .map(|(i, id)| {
-                let badge = badges::find(id).expect("known badge");
-                badges::render(badge, i, 70.0 + (i as f64) * 130.0, 80.0, 55.0)
-            })
-            .collect();
-
-        let svg = format!(
-            r##"<svg xmlns="http://www.w3.org/2000/svg" width="820" height="160"
-                     viewBox="0 0 820 160">
-              <rect width="820" height="160" fill="#1b1f2b"/>{plates}</svg>"##
-        );
-
-        let png = render(&svg, 820, 160, 1).expect("render");
-        let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
-        std::fs::write(format!("{dir}/badges-large.png"), png).expect("write");
-    }
-}
-
-#[cfg(test)]
 mod levelup_widths {
     use super::*;
 
@@ -519,314 +504,6 @@ mod blur_probe {
             blurred_outside > 40,
             "feGaussianBlur appears unsupported: no bleed outside the rect"
         );
-    }
-}
-
-#[cfg(test)]
-mod layout_prototype {
-    use super::*;
-    use crate::modules::leveling::badges;
-
-    struct Spec {
-        name: &'static str,
-        width: f64,
-        height: f64,
-        pad: f64,
-        hero_header: bool,
-        avatar_r: f64,
-        name_size: f64,
-        header: (f64, f64),
-        server: (f64, f64),
-        global: (f64, f64),
-        badges: (f64, f64),
-        badge_r: f64,
-    }
-
-    const VARIANTS: &[Spec] = &[
-        Spec {
-            name: "a-hero",
-            width: 440.0,
-            height: 572.0,
-            pad: 20.0,
-            hero_header: true,
-            avatar_r: 44.0,
-            name_size: 24.0,
-            header: (20.0, 150.0),
-            server: (186.0, 140.0),
-            global: (342.0, 90.0),
-            badges: (448.0, 104.0),
-            badge_r: 22.0,
-        },
-        Spec {
-            name: "b-refined",
-            width: 440.0,
-            height: 512.0,
-            pad: 20.0,
-            hero_header: false,
-            avatar_r: 36.0,
-            name_size: 22.0,
-            header: (20.0, 104.0),
-            server: (140.0, 136.0),
-            global: (292.0, 84.0),
-            badges: (392.0, 100.0),
-            badge_r: 21.0,
-        },
-        Spec {
-            name: "c-compact",
-            width: 420.0,
-            height: 420.0,
-            pad: 16.0,
-            hero_header: false,
-            avatar_r: 30.0,
-            name_size: 19.0,
-            header: (16.0, 88.0),
-            server: (116.0, 112.0),
-            global: (240.0, 68.0),
-            badges: (320.0, 84.0),
-            badge_r: 18.0,
-        },
-    ];
-
-    fn panel(s: &Spec, (y, h): (f64, f64), i: usize) -> String {
-        let (x, w) = (s.pad, s.width - s.pad * 2.0);
-        format!(
-            r##"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="18"
-                      fill="#ffffff" opacity="0.045"/>
-                <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="18" fill="none"
-                      stroke="#ffffff" stroke-opacity="0.10" stroke-width="1"/>
-                <!-- panel {i} -->"##
-        )
-    }
-
-    fn label(s: &Spec, y: f64, text: &str, accent: &accent::Accent, family: &str) -> String {
-        format!(
-            r##"<text x="{x}" y="{y}" font-family="{F}" font-size="11" font-weight="bold"
-                      fill="{c}" letter-spacing="2">{text}</text>"##,
-            x = s.pad + 20.0,
-            F = family,
-            c = accent.light
-        )
-    }
-
-    fn build(s: &Spec, accent: &accent::Accent) -> String {
-        build_with(s, accent, FONT_FAMILY)
-    }
-
-    fn build_with(s: &Spec, accent: &accent::Accent, family: &str) -> String {
-        let (l, r) = (s.pad + 20.0, s.width - s.pad - 20.0);
-        let (hy, hh) = s.header;
-
-        let header = if s.hero_header {
-            let cx = s.width / 2.0;
-            let cy = hy + s.avatar_r + 22.0;
-            format!(
-                r##"<circle cx="{cx}" cy="{cy}" r="{ar}" fill="#2b3145"/>
-                    <text x="{cx}" y="{cy}" font-family="{F}" font-size="{init}" font-weight="bold"
-                          fill="#8b93a8" text-anchor="middle" dominant-baseline="central">Y</text>
-                    <circle cx="{cx}" cy="{cy}" r="{ring}" fill="none" stroke="url(#accent)" stroke-width="3"/>
-                    <text x="{cx}" y="{ny}" font-family="{F}" font-size="{ns}" font-weight="bold"
-                          fill="#f4f6fb" text-anchor="middle">yuri</text>"##,
-                ar = s.avatar_r,
-                ring = s.avatar_r + 2.0,
-                init = s.avatar_r * 0.86,
-                ny = hy + hh - 18.0,
-                ns = s.name_size,
-                F = family,
-            )
-        } else {
-            let cx = l + s.avatar_r;
-            let cy = hy + hh / 2.0;
-            let tx = cx + s.avatar_r + 18.0;
-            format!(
-                r##"<circle cx="{cx}" cy="{cy}" r="{ar}" fill="#2b3145"/>
-                    <text x="{cx}" y="{cy}" font-family="{F}" font-size="{init}" font-weight="bold"
-                          fill="#8b93a8" text-anchor="middle" dominant-baseline="central">Y</text>
-                    <circle cx="{cx}" cy="{cy}" r="{ring}" fill="none" stroke="url(#accent)" stroke-width="3"/>
-                    <text x="{tx}" y="{ny}" font-family="{F}" font-size="{ns}" font-weight="bold"
-                          fill="#f4f6fb">yuri</text>
-                    <text x="{tx}" y="{sy}" font-family="{F}" font-size="{ss}" fill="#9aa4bd">
-                      Level 7 · Rank #3
-                    </text>"##,
-                ar = s.avatar_r,
-                ring = s.avatar_r + 2.0,
-                init = s.avatar_r * 0.86,
-                ny = cy - 4.0,
-                sy = cy + 18.0,
-                ns = s.name_size,
-                ss = s.name_size * 0.62,
-                F = family,
-            )
-        };
-
-        let (sy, sh) = s.server;
-        let bar_y = sy + sh - 58.0;
-        let (gy, gh) = s.global;
-        let (by, bh) = s.badges;
-        let strip: String = ["veteran", "elder", "legend", "melody", "peak", "heart"]
-            .iter()
-            .enumerate()
-            .map(|(i, id)| {
-                let badge = badges::find(id).expect("badge");
-                let step = s.badge_r * 2.0 + 16.0;
-                badges::render(
-                    badge,
-                    i,
-                    l + s.badge_r + (i as f64) * step,
-                    by + bh - s.badge_r - 14.0,
-                    s.badge_r,
-                )
-            })
-            .collect();
-
-        format!(
-            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#12141d"/><stop offset="100%" stop-color="#1d2130"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="{al}"/><stop offset="100%" stop-color="{ab}"/>
-    </linearGradient>
-    <clipPath id="card"><rect width="{w}" height="{h}" rx="26"/></clipPath>
-  </defs>
-  <rect width="{w}" height="{h}" rx="26" fill="url(#bg)"/>
-  <g clip-path="url(#card)"><circle cx="{gx}" cy="-30" r="150" fill="{ab}" opacity="0.14"/></g>
-
-  {p0}{header}
-  {p1}{server_label}
-  <text x="{l}" y="{lvl_y}" font-family="{F}" font-size="{lvl}" font-weight="bold" fill="#f4f6fb">Level 7</text>
-  <text x="{r}" y="{lvl_y}" font-family="{F}" font-size="{sub}" fill="#9aa4bd" text-anchor="end">Rank #3</text>
-  <rect x="{l}" y="{bar_y}" width="{barw}" height="14" rx="7" fill="#2b3145"/>
-  <rect x="{l}" y="{bar_y}" width="{fill}" height="14" rx="7" fill="url(#accent)"/>
-  <text x="{l}" y="{xp_y}" font-family="{F}" font-size="13" fill="#9aa4bd">940 / 1500 XP to level 8</text>
-  <text x="{r}" y="{xp_y}" font-family="{F}" font-size="13" fill="#9aa4bd" text-anchor="end">4900 XP</text>
-
-  {p2}{global_label}
-  <text x="{l}" y="{g_y}" font-family="{F}" font-size="{glvl}" font-weight="bold" fill="#f4f6fb">Level 12</text>
-  <text x="{gmid}" y="{g_y}" font-family="{F}" font-size="{sub}" fill="#9aa4bd">Rank #148</text>
-  <text x="{r}" y="{g_y}" font-family="{F}" font-size="{sub}" fill="#9aa4bd" text-anchor="end">14.4k XP</text>
-
-  {p3}{badges_label}
-  <text x="{r}" y="{b_y}" font-family="{F}" font-size="14" font-weight="bold" fill="{al}"
-        text-anchor="end">1,240 coins</text>
-  {strip}
-</svg>"##,
-            w = s.width,
-            h = s.height,
-            F = family,
-            ab = accent.base,
-            al = accent.light,
-            gx = s.width - 40.0,
-            p0 = panel(s, s.header, 0),
-            p1 = panel(s, s.server, 1),
-            p2 = panel(s, s.global, 2),
-            p3 = panel(s, s.badges, 3),
-            server_label = label(s, sy + 26.0, "THIS SERVER", accent, family),
-            global_label = label(s, gy + 26.0, "GLOBAL", accent, family),
-            badges_label = label(s, by + 26.0, "BADGES", accent, family),
-            lvl_y = sy + 62.0,
-            lvl = s.name_size * 1.2,
-            sub = s.name_size * 0.82,
-            barw = r - l,
-            fill = (r - l) * 0.627,
-            xp_y = bar_y + 36.0,
-            g_y = gy + gh - 22.0,
-            glvl = s.name_size,
-            gmid = l + (r - l) * 0.45,
-            b_y = by + 26.0,
-        )
-    }
-
-    fn rasterise_with(svg: &str, w: u32, h: u32, family: &str, files: &[&str]) -> Vec<u8> {
-        let mut db = fontdb::Database::new();
-        for path in files {
-            let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-            db.load_font_data(data);
-        }
-
-        db.load_font_data(NOTO_SANS.to_vec());
-        db.load_font_data(NOTO_CJK.to_vec());
-        db.set_sans_serif_family(family);
-
-        let options = usvg::Options {
-            fontdb: Arc::new(db),
-            ..Default::default()
-        };
-        let tree = usvg::Tree::from_str(svg, &options).expect("parse");
-        let mut pixmap = tiny_skia::Pixmap::new(w, h).expect("pixmap");
-        resvg::render(
-            &tree,
-            tiny_skia::Transform::identity(),
-            &mut pixmap.as_mut(),
-        );
-        pixmap.encode_png().expect("png")
-    }
-
-    #[test]
-    #[ignore = "prototype: compare candidate fonts"]
-    fn compare_fonts() {
-        let accent = accent::Accent::default();
-        let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
-        let spec = &VARIANTS[1];
-
-        let candidates: [(&str, Vec<&str>); 5] = [
-            ("Noto Sans", vec![]),
-            (
-                "Figtree",
-                vec![
-                    "/tmp/fonttest/Figtree_400Regular.ttf",
-                    "/tmp/fonttest/Figtree_700Bold.ttf",
-                ],
-            ),
-            (
-                "Inter",
-                vec![
-                    "/tmp/fonttest/Inter_400Regular.ttf",
-                    "/tmp/fonttest/Inter_700Bold.ttf",
-                ],
-            ),
-            (
-                "Manrope",
-                vec![
-                    "/tmp/fonttest/Manrope_400Regular.ttf",
-                    "/tmp/fonttest/Manrope_700Bold.ttf",
-                ],
-            ),
-            (
-                "Outfit",
-                vec![
-                    "/tmp/fonttest/Outfit_400Regular.ttf",
-                    "/tmp/fonttest/Outfit_700Bold.ttf",
-                ],
-            ),
-        ];
-
-        for (family, files) in &candidates {
-            let svg = build_with(spec, &accent, family);
-            let png = rasterise_with(&svg, spec.width as u32, spec.height as u32, family, files);
-            let slug = family.to_lowercase().replace(' ', "-");
-            std::fs::write(format!("{dir}/font-{slug}.png"), png).expect("write");
-            println!("rendered {family}");
-        }
-    }
-
-    #[test]
-    #[ignore = "prototype: compare layout proportions"]
-    fn compare_variants() {
-        let accent = accent::Accent::default();
-        let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
-
-        for spec in VARIANTS {
-            let png = render(
-                &build(spec, &accent),
-                spec.width as u32,
-                spec.height as u32,
-                1,
-            )
-            .expect("render");
-            std::fs::write(format!("{dir}/var-{}.png", spec.name), png).expect("write");
-            println!("{}: {}x{}", spec.name, spec.width, spec.height);
-        }
     }
 }
 

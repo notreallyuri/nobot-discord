@@ -1,8 +1,4 @@
-use crate::{
-    Context,
-    error::AppError,
-    modules::leveling::{card::accent, store},
-};
+use crate::{Context, card::accent, error::AppError, modules::leveling::store};
 use poise::serenity_prelude as serenity;
 
 /// Set or clear your profile accent colour

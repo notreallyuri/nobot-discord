@@ -1,13 +1,9 @@
 use crate::{
     Context, HttpKey,
+    card::{self, accent::Accent},
     data::MemberId,
     error::AppError,
-    modules::leveling::{
-        badges,
-        card::{self, accent::Accent},
-        setup::xp,
-        store,
-    },
+    modules::leveling::{badges, setup::xp, store},
 };
 use poise::serenity_prelude as serenity;
 
@@ -57,10 +53,14 @@ pub async fn profile(
         tracing::warn!(?error, user_id, "could not store the refitted background");
     }
 
-    let equipped: Vec<&'static badges::Badge> = page
+    let equipped: Vec<card::emblem::Emblem<'_>> = page
         .badges
         .iter()
         .filter_map(|id| badges::find(id))
+        .map(|badge| card::emblem::Emblem {
+            icon: badge.icon,
+            colour: badge.colour,
+        })
         .collect();
     let settings = data.guild_config(guild_id).await;
 

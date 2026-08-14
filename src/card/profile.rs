@@ -1,5 +1,5 @@
+use super::emblem::{self, Emblem};
 use super::{FONT_FAMILY, accent::Accent, compact, escape, truncate};
-use crate::modules::leveling::badges::{self, Badge};
 
 pub const WIDTH: u32 = 560;
 pub const HEIGHT: u32 = 560;
@@ -49,6 +49,7 @@ const BADGE_R: f64 = 24.0;
 const BADGE_COLUMNS: usize = 2;
 const BADGE_ROWS: usize = 4;
 const BADGE_TOP: f64 = 46.0;
+pub const CAPACITY: usize = BADGE_COLUMNS * BADGE_ROWS;
 
 const BAR_TEXT: f64 = 15.0;
 
@@ -160,7 +161,7 @@ pub struct Profile<'a> {
     pub background_blur: Option<&'a str>,
     pub guild: Standing,
     pub global: Standing,
-    pub badges: &'a [&'static Badge],
+    pub badges: &'a [Emblem<'a>],
     pub coins: i64,
     pub currency: &'a str,
 }
@@ -416,7 +417,7 @@ pub fn svg(card: &Profile<'_>) -> String {
             .iter()
             .zip(badge_slots(card.badges.len()))
             .enumerate()
-            .map(|(i, (badge, (cx, cy)))| badges::render(badge, i, cx, cy, BADGE_R))
+            .map(|(i, (badge, (cx, cy)))| emblem::render(badge, i, cx, cy, BADGE_R))
             .collect::<Vec<_>>()
             .join("")
     };
@@ -793,7 +794,7 @@ mod tests {
 
     #[test]
     fn badges_fill_left_to_right_then_downward() {
-        let slots: Vec<_> = badge_slots(badges::MAX_EQUIPPED).collect();
+        let slots: Vec<_> = badge_slots(CAPACITY).collect();
         let rows: Vec<_> = slots.chunks(BADGE_COLUMNS).collect();
 
         for (i, row) in rows.iter().enumerate() {
@@ -820,14 +821,17 @@ mod tests {
     fn badge_counts() {
         let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
         let accent = Accent::default();
-        let ids = [
-            "veteran", "elder", "legend", "melody", "peak", "heart", "sun", "bloom",
+        let colours = [
+            "#fbbf24", "#38bdf8", "#f472b6", "#a78bfa", "#34d399", "#fb7185", "#fcd34d", "#f9a8d4",
         ];
 
-        for count in [0, 1, 2, 3, 8] {
-            let equipped: Vec<&'static Badge> = ids[..count]
+        for count in [0, 1, 2, 3, CAPACITY] {
+            let equipped: Vec<Emblem<'_>> = colours[..count]
                 .iter()
-                .map(|id| badges::find(id).expect("known badge"))
+                .map(|colour| Emblem {
+                    icon: r#"<svg viewBox="0 0 24 24"><path d="M4 12 L12 4 L20 12 L12 20 Z"/></svg>"#,
+                    colour,
+                })
                 .collect();
 
             let svg = svg(&Profile {
@@ -862,16 +866,10 @@ mod tests {
 
     #[test]
     fn the_badge_grid_stays_inside_its_rail() {
-        assert_eq!(
-            BADGE_COLUMNS * BADGE_ROWS,
-            badges::MAX_EQUIPPED,
-            "the grid must have a cell for every badge a user can equip"
-        );
-
         let label_clearance = STRIP.y + BADGE_TOP;
-        let full: Vec<_> = badge_slots(badges::MAX_EQUIPPED).collect();
+        let full: Vec<_> = badge_slots(CAPACITY).collect();
 
-        for count in 1..=badges::MAX_EQUIPPED {
+        for count in 1..=CAPACITY {
             let slots: Vec<_> = badge_slots(count).collect();
             assert_eq!(slots.len(), count);
 
