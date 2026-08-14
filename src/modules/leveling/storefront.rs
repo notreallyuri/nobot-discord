@@ -39,13 +39,6 @@ impl Aisle {
         }
     }
 
-    fn tab(self) -> &'static str {
-        match self {
-            Aisle::Badges => "Badges",
-            Aisle::Boosters => "Boosters",
-        }
-    }
-
     fn blurb(self) -> &'static str {
         match self {
             Aisle::Badges => "Worn on your profile card. Bought once.",
@@ -75,13 +68,26 @@ pub fn page_id(aisle: Aisle, page: usize) -> String {
     format!("{PREFIX}page:{}:{page}", aisle.slug())
 }
 
+pub const SELECT_ID: &str = "shop:aisle";
+
 /// Where a press wants to go. The whole position lives in the id, so a shop
 /// posted before a restart still works afterwards.
-pub fn parse(custom_id: &str) -> Option<(Aisle, usize)> {
+/// Where a press wants to go. A pick carries its aisle in the chosen value
+/// rather than the id, so the picker keeps one id however many aisles there are.
+pub enum Move {
+    Page(Aisle, usize),
+    Pick,
+}
+
+pub fn parse(custom_id: &str) -> Option<Move> {
+    if custom_id == SELECT_ID {
+        return Some(Move::Pick);
+    }
+
     let rest = custom_id.strip_prefix(PREFIX)?.strip_prefix("page:")?;
     let (aisle, page) = rest.split_once(':')?;
 
-    Some((Aisle::from_slug(aisle)?, page.parse().ok()?))
+    Some(Move::Page(Aisle::from_slug(aisle)?, page.parse().ok()?))
 }
 
 pub type Wallet = store::Purse;
@@ -250,42 +256,44 @@ pub async fn shelf(aisle: Aisle) -> Option<serenity::CreateAttachment> {
         .map(|(shelf, png)| serenity::CreateAttachment::bytes(png.clone(), shelf))
 }
 
-/// Discord gives a select menu a whole action row and will not let buttons
-/// share it, so the aisles are buttons too. Two aisles plus Back and Next is
-/// four of the five a row allows; a third aisle would have to give that up.
+/// Discord gives a select menu its own action row and will not let buttons
+/// share it, so the picker and the page turns sit on separate rows. Aisles live
+/// in the menu rather than in buttons because a row holds five, and buttons
+/// would cap the shop at three categories.
 pub fn components(aisle: Aisle, page: usize) -> Vec<serenity::CreateActionRow> {
     let last = pages(aisle) - 1;
     let page = page.min(last);
 
-    let mut row: Vec<serenity::CreateButton> = Aisle::ALL
+    let options: Vec<serenity::CreateSelectMenuOption> = Aisle::ALL
         .iter()
         .map(|entry| {
-            serenity::CreateButton::new(page_id(*entry, 0))
-                .label(entry.tab())
-                .style(if *entry == aisle {
-                    serenity::ButtonStyle::Primary
-                } else {
-                    serenity::ButtonStyle::Secondary
-                })
+            serenity::CreateSelectMenuOption::new(entry.label(), entry.slug())
+                .description(entry.blurb())
+                .default_selection(*entry == aisle)
         })
         .collect();
 
-    if last > 0 {
-        row.push(
-            serenity::CreateButton::new(page_id(aisle, page.saturating_sub(1)))
-                .label("Back")
-                .style(serenity::ButtonStyle::Secondary)
-                .disabled(page == 0),
-        );
-        row.push(
-            serenity::CreateButton::new(page_id(aisle, (page + 1).min(last)))
-                .label("Next")
-                .style(serenity::ButtonStyle::Secondary)
-                .disabled(page == last),
-        );
+    let picker = serenity::CreateActionRow::SelectMenu(serenity::CreateSelectMenu::new(
+        SELECT_ID,
+        serenity::CreateSelectMenuKind::String { options },
+    ));
+
+    if last == 0 {
+        return vec![picker];
     }
 
-    vec![serenity::CreateActionRow::Buttons(row)]
+    let turn = serenity::CreateActionRow::Buttons(vec![
+        serenity::CreateButton::new(page_id(aisle, page.saturating_sub(1)))
+            .label("Back")
+            .style(serenity::ButtonStyle::Secondary)
+            .disabled(page == 0),
+        serenity::CreateButton::new(page_id(aisle, (page + 1).min(last)))
+            .label("Next")
+            .style(serenity::ButtonStyle::Secondary)
+            .disabled(page == last),
+    ]);
+
+    vec![picker, turn]
 }
 
 #[cfg(test)]
@@ -297,30 +305,89 @@ mod tests {
         for aisle in Aisle::ALL {
             for page in [0, 1, 7] {
                 let id = page_id(aisle, page);
-                let (back, at) = parse(&id).unwrap_or_else(|| panic!("{id} did not parse"));
+                match parse(&id) {
+                    Some(Move::Page(back, at)) => {
+                        assert_eq!(back.slug(), aisle.slug());
+                        assert_eq!(at, page);
+                    }
+                    _ => panic!("{id} did not parse back to a page"),
+                }
+            }
+        }
+    }
 
-                assert_eq!(back.slug(), aisle.slug());
-                assert_eq!(at, page);
+    fn custom_ids(rows: &[serenity::CreateActionRow]) -> Vec<String> {
+        fn walk(value: &serde_json::Value, found: &mut Vec<String>) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    for (key, nested) in map {
+                        if key == "custom_id"
+                            && let Some(id) = nested.as_str()
+                        {
+                            found.push(id.to_string());
+                        }
+                        walk(nested, found);
+                    }
+                }
+                serde_json::Value::Array(items) => items.iter().for_each(|it| walk(it, found)),
+                _ => {}
+            }
+        }
+
+        let payload = serde_json::to_value(rows).expect("components serialise");
+        let mut found = Vec::new();
+        walk(&payload, &mut found);
+        found
+    }
+
+    #[test]
+    fn no_page_repeats_a_custom_id() {
+        for aisle in Aisle::ALL {
+            for page in 0..pages(aisle) {
+                let ids = custom_ids(&components(aisle, page));
+                let mut unique = ids.clone();
+                unique.sort();
+                unique.dedup();
+
+                assert_eq!(
+                    unique.len(),
+                    ids.len(),
+                    "{} page {page} repeats a custom id: {ids:?}",
+                    aisle.label()
+                );
             }
         }
     }
 
     #[test]
-    fn every_control_fits_one_row_within_discords_limit() {
+    fn every_control_leads_somewhere_this_shop_understands() {
         for aisle in Aisle::ALL {
-            let rows = components(aisle, 0);
-            assert_eq!(rows.len(), 1, "{} should need one row", aisle.label());
+            for page in 0..pages(aisle) {
+                for id in custom_ids(&components(aisle, page)) {
+                    assert!(parse(&id).is_some(), "{id} does not parse back");
+                }
+            }
+        }
+    }
 
-            let serenity::CreateActionRow::Buttons(buttons) = &rows[0] else {
-                panic!("a select menu cannot share a row with buttons");
-            };
+    #[test]
+    fn the_picker_id_parses_as_a_pick() {
+        assert!(matches!(parse(SELECT_ID), Some(Move::Pick)));
+    }
 
-            assert!(
-                buttons.len() <= 5,
-                "{} needs {} buttons, more than a row holds",
-                aisle.label(),
-                buttons.len()
-            );
+    #[test]
+    fn no_row_exceeds_what_discord_holds() {
+        for aisle in Aisle::ALL {
+            for row in components(aisle, 0) {
+                if let serenity::CreateActionRow::Buttons(buttons) = row {
+                    assert!(
+                        buttons.len() <= 5,
+                        "{} needs {} buttons, more than a row holds",
+                        aisle.label(),
+                        buttons.len()
+                    );
+                }
+            }
         }
     }
 
@@ -378,15 +445,7 @@ mod tests {
 
     #[test]
     fn a_single_page_aisle_offers_no_turn_buttons() {
-        let one_page = components(Aisle::Boosters, 0);
-        let many_pages = components(Aisle::Badges, 0);
-
-        let count = |rows: &[serenity::CreateActionRow]| match &rows[0] {
-            serenity::CreateActionRow::Buttons(buttons) => buttons.len(),
-            _ => panic!("expected buttons"),
-        };
-
-        assert_eq!(count(&one_page), Aisle::ALL.len());
-        assert_eq!(count(&many_pages), Aisle::ALL.len() + 2);
+        assert_eq!(components(Aisle::Boosters, 0).len(), 1);
+        assert_eq!(components(Aisle::Badges, 0).len(), 2);
     }
 }

@@ -185,8 +185,27 @@ async fn browse_shop(
     data: &Data,
     press: &serenity::ComponentInteraction,
 ) -> Result<(), AppError> {
-    let Some((aisle, page)) = storefront::parse(&press.data.custom_id) else {
+    let Some(step) = storefront::parse(&press.data.custom_id) else {
         return Ok(());
+    };
+
+    let (aisle, page) = match step {
+        storefront::Move::Page(aisle, page) => (aisle, page),
+        storefront::Move::Pick => {
+            let serenity::ComponentInteractionDataKind::StringSelect { values } = &press.data.kind
+            else {
+                return Ok(());
+            };
+
+            let Some(aisle) = values
+                .first()
+                .and_then(|slug| storefront::Aisle::from_slug(slug))
+            else {
+                return Ok(());
+            };
+
+            (aisle, 0)
+        }
     };
 
     let guild_id = press.guild_id.map_or(0, |id| id.get() as i64);
