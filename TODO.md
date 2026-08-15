@@ -156,8 +156,25 @@ feature itself ships. Items with no nested line need no schema change.
 - [ ] XP boosters in shop (temporary/permanent multipliers)
   - [ ] db — new `user_booster` table; temporary ones need an `expires_at`
 - [ ] More shop customization options (profile colors, card themes, extra banner slots)
-  - [ ] db — `profile.theme`, `profile.background_slots` (how many the user owns),
-        and a `user_background` table, since `profile.background` holds exactly one
+  - [x] **Cosmetics aisle shipped** — `/shop buy`, `/cosmetics list · equip ·
+        unequip`, and a third aisle in the paged storefront
+    - [x] db — `0014_cosmetics`: a `user_cosmetic` ownership table plus
+          `profile.accent_cosmetic` and `profile.card_effect` as the two worn
+          slots. No `profile.theme`: a theme id per kind is the same thing with
+          the slot named, and it leaves room for a third kind later.
+    - Two kinds so far. **Gradient accents** are two-stop, which is the point:
+      `/color set` takes one hex and derives the highlight, so a chosen pair is
+      the thing coins actually buy. Equipping one covers the plain colour rather
+      than overwriting it, so taking it off gives the old colour back.
+    - **Card effects** (`Glow`, `Aurora`) draw from the wearer's accent instead
+      of carrying colours, so one effect looks different on every card. Stacked
+      translucent strokes, not `feGaussianBlur` — nothing else in `card/` uses
+      SVG filters.
+    - Adding either kind is a `COSMETICS` entry and, for an effect, one arm in
+      `card::effect`. No migration.
+  - [ ] Still open here: **extra banner slots**
+    - [ ] db — `profile.background_slots` (how many the user owns) and a
+          `user_background` table, since `profile.background` holds exactly one
   - Two buttons under the profile message page through *sections*, up to 4 items
     per page.
   - **Grid: adaptive mosaic (decided).** The layout changes with the count so the
@@ -206,7 +223,8 @@ means Discord holds the rules, so that feature needs no migration at all.
 | next | `profile` listening counters | Music/profile integration, music badges |
 | next | `profile` streak columns | Login streaks |
 | next | `user_booster` | XP boosters |
-| next | `user_background` + `profile.theme` | Extra banner slots, card themes |
+| ~~0014~~ | ~~`user_cosmetic` + profile slots~~ — done | Gradient accents, card effects |
+| next | `user_background` | Extra banner slots |
 | next | `transfer` ledger | Trading/gifting |
 
 Only 0007 is numbered — later numbers get assigned when written, so parallel work

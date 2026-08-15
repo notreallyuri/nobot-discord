@@ -1,3 +1,4 @@
+use super::effect::Effect;
 use super::emblem::{self, Emblem};
 use super::{FONT_FAMILY, accent::Accent, compact, escape, truncate};
 
@@ -164,6 +165,7 @@ pub struct Profile<'a> {
     pub badges: &'a [Emblem<'a>],
     pub coins: i64,
     pub currency: &'a str,
+    pub effect: Option<Effect>,
 }
 
 #[derive(Clone, Copy)]
@@ -379,6 +381,15 @@ pub fn svg(card: &Profile<'_>) -> String {
         ),
     };
 
+    let (fx_defs, fx_wash, fx_rim) = match card.effect {
+        Some(effect) => (
+            effect.defs(card.accent),
+            effect.wash(WIDTH, HEIGHT),
+            effect.rim(WIDTH, HEIGHT),
+        ),
+        None => (String::new(), String::new(), String::new()),
+    };
+
     let panels = if over_image {
         vec![HEADER, STATS, STRIP]
     } else {
@@ -439,10 +450,11 @@ pub fn svg(card: &Profile<'_>) -> String {
     <clipPath id="avatar-clip">
       <circle cx="{AVATAR_CX}" cy="{AVATAR_CY}" r="{AVATAR_R}"/>
     </clipPath>
+    {fx_defs}
   </defs>
 
   <rect width="{WIDTH}" height="{HEIGHT}" rx="26" fill="url(#bg)"/>
-  <g clip-path="url(#card-clip)">{backdrop}</g>
+  <g clip-path="url(#card-clip)">{backdrop}{fx_wash}</g>
 
   {grounds}
   {avatar}
@@ -476,6 +488,7 @@ pub fn svg(card: &Profile<'_>) -> String {
 
   {strip_label}
   {strip}
+  {fx_rim}
 </svg>"##,
         accent_base = card.accent.base,
         accent_light = card.accent.light,
@@ -515,6 +528,10 @@ mod tests {
     use super::*;
 
     fn card_for(name: &str) -> String {
+        card_wearing(name, None)
+    }
+
+    fn card_wearing(name: &str, effect: Option<Effect>) -> String {
         let accent = Accent::default();
         svg(&Profile {
             name,
@@ -538,7 +555,49 @@ mod tests {
             badges: &[],
             coins: 1_240,
             currency: "coins",
+            effect,
         })
+    }
+
+    #[test]
+    fn every_effect_rasterises_and_visibly_changes_the_card() {
+        let plain = super::super::rasterise(&card_for("yuri"), WIDTH, HEIGHT, 1).expect("plain");
+
+        for effect in [Effect::Glow, Effect::Aurora] {
+            let svg = card_wearing("yuri", Some(effect));
+            let worn = super::super::rasterise(&svg, WIDTH, HEIGHT, 1)
+                .unwrap_or_else(|e| panic!("{effect:?} does not rasterise: {e:?}"));
+
+            let changed = plain
+                .pixels()
+                .iter()
+                .zip(worn.pixels())
+                .filter(|(before, after)| before != after)
+                .count();
+
+            assert!(
+                changed > 500,
+                "{effect:?} only changed {changed} pixels, which is not something anyone would see"
+            );
+        }
+    }
+
+    #[test]
+    fn an_effect_leaves_the_middle_of_the_card_alone() {
+        let plain = super::super::rasterise(&card_for("yuri"), WIDTH, HEIGHT, 1).expect("plain");
+        let worn =
+            super::super::rasterise(&card_wearing("yuri", Some(Effect::Glow)), WIDTH, HEIGHT, 1)
+                .expect("glow");
+
+        for y in 20..WIDTH - 20 {
+            for x in 20..HEIGHT - 20 {
+                assert_eq!(
+                    plain.pixel(x, y),
+                    worn.pixel(x, y),
+                    "glow bled into the card at {x},{y}"
+                );
+            }
+        }
     }
 
     fn name_ink(name: &str) -> Option<(u32, u32)> {
@@ -608,6 +667,7 @@ mod tests {
             badges: &[],
             coins: 1_240,
             currency: "coins",
+            effect: None,
         });
 
         super::super::rasterise(&svg, WIDTH, HEIGHT, 1).expect("rasterise")
@@ -856,6 +916,7 @@ mod tests {
                 badges: &equipped,
                 coins: 1_240,
                 currency: "coins",
+                effect: None,
             });
 
             let png = super::super::render(&svg, WIDTH, HEIGHT, super::super::SUPERSAMPLE)
@@ -892,6 +953,55 @@ mod tests {
                 &slots[..],
                 &full[..count],
                 "with {count} badges the slots differ from a full grid's first {count}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod effect_preview {
+    use super::*;
+    use crate::modules::leveling::cosmetics;
+
+    #[test]
+    #[ignore = "diagnostic: render a card wearing each cosmetic"]
+    fn a_card_wearing_each_cosmetic() {
+        let dir = std::env::var("CARD_DUMP").expect("set CARD_DUMP");
+
+        for cosmetic in cosmetics::purchasable() {
+            let accent = cosmetics::accent(Some(cosmetic.id), None);
+            let svg = svg(&Profile {
+                name: "yuri",
+                handle: "yuri",
+                accent: &accent,
+                avatar: None,
+                background: None,
+                background_blur: None,
+                guild: Standing {
+                    level: 7,
+                    rank: 3,
+                    experience: 4_900,
+                    progress: (940, 1_500),
+                },
+                global: Standing {
+                    level: 12,
+                    rank: 148,
+                    experience: 14_400,
+                    progress: (1_900, 2_500),
+                },
+                badges: &[],
+                coins: 1_240,
+                currency: "coins",
+                effect: cosmetics::effect(Some(cosmetic.id)),
+            });
+
+            let png = super::super::render(&svg, WIDTH, HEIGHT, super::super::SUPERSAMPLE)
+                .expect("render");
+            std::fs::write(format!("{dir}/cosmetic-{}.png", cosmetic.id), png).expect("write");
+            println!(
+                "{:>16}  {} coins",
+                cosmetic.name,
+                cosmetic.price.unwrap_or(0)
             );
         }
     }

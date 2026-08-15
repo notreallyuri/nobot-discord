@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "WITH guild AS (\n               SELECT COALESCE(\n                   (SELECT experience FROM guild_member WHERE guild_id = $1 AND user_id = $2),\n                   0\n               ) AS xp\n           ),\n           global AS (\n               SELECT COALESCE((SELECT experience FROM users WHERE user_id = $2), 0) AS xp\n           )\n           SELECT\n               guild.xp AS \"guild_experience!\",\n               (SELECT COUNT(*) + 1 FROM guild_member\n                 WHERE guild_id = $1 AND experience > guild.xp) AS \"guild_rank!\",\n               global.xp AS \"global_experience!\",\n               (SELECT COUNT(*) + 1 FROM users WHERE experience > global.xp) AS \"global_rank!\",\n               p.coins,\n               p.accent,\n               p.background,\n               p.background_blur,\n               ARRAY(\n                   SELECT badge_id FROM user_badge\n                    WHERE user_id = $2 AND equipped ORDER BY acquired_at\n               ) AS \"badges!\"\n           FROM guild CROSS JOIN global\n           LEFT JOIN profile p ON p.user_id = $2",
+  "query": "WITH guild AS (\n               SELECT COALESCE(\n                   (SELECT experience FROM guild_member WHERE guild_id = $1 AND user_id = $2),\n                   0\n               ) AS xp\n           ),\n           global AS (\n               SELECT COALESCE((SELECT experience FROM users WHERE user_id = $2), 0) AS xp\n           )\n           SELECT\n               guild.xp AS \"guild_experience!\",\n               (SELECT COUNT(*) + 1 FROM guild_member\n                 WHERE guild_id = $1 AND experience > guild.xp) AS \"guild_rank!\",\n               global.xp AS \"global_experience!\",\n               (SELECT COUNT(*) + 1 FROM users WHERE experience > global.xp) AS \"global_rank!\",\n               p.coins,\n               p.accent,\n               p.accent_cosmetic,\n               p.card_effect,\n               p.background,\n               p.background_blur,\n               ARRAY(\n                   SELECT badge_id FROM user_badge\n                    WHERE user_id = $2 AND equipped ORDER BY acquired_at\n               ) AS \"badges!\"\n           FROM guild CROSS JOIN global\n           LEFT JOIN profile p ON p.user_id = $2",
   "describe": {
     "columns": [
       {
@@ -51,6 +51,28 @@
       },
       {
         "ordinal": 6,
+        "name": "accent_cosmetic",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "accent_cosmetic"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "card_effect",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "card_effect"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
         "name": "background",
         "type_info": "Bytea",
         "origin": {
@@ -61,7 +83,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 9,
         "name": "background_blur",
         "type_info": "Bytea",
         "origin": {
@@ -72,7 +94,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 10,
         "name": "badges!",
         "type_info": "TextArray",
         "origin": "Expression"
@@ -93,8 +115,10 @@
       true,
       true,
       true,
+      true,
+      true,
       null
     ]
   },
-  "hash": "bc990c5a0a76ba5b8e1d08179b4e87111587a73b1be500d3dfc5d31ed9bb1dbf"
+  "hash": "67b8efe10f434b20d217df131a199b579e645f8447b2aec5ecba5e41c86347ce"
 }

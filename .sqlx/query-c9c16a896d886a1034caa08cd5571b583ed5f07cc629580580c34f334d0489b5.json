@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE profile SET card_effect = NULL, updated_at = now()\n             WHERE user_id = $1 AND card_effect = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c9c16a896d886a1034caa08cd5571b583ed5f07cc629580580c34f334d0489b5"
+}

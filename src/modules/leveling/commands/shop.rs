@@ -1,7 +1,7 @@
 use crate::{
     Context,
     error::AppError,
-    modules::leveling::{badges, boosters, store, storefront},
+    modules::leveling::{badges, boosters, cosmetics, store, storefront},
 };
 use poise::serenity_prelude as serenity;
 
@@ -48,6 +48,7 @@ pub async fn list(ctx: Context<'_>) -> Result<(), AppError> {
 enum Item {
     Badge(&'static badges::Badge),
     Booster(&'static boosters::Booster),
+    Cosmetic(&'static cosmetics::Cosmetic),
 }
 
 impl Item {
@@ -55,12 +56,14 @@ impl Item {
         badges::resolve(input)
             .map(Item::Badge)
             .or_else(|| boosters::resolve(input).map(Item::Booster))
+            .or_else(|| cosmetics::resolve(input).map(Item::Cosmetic))
     }
 
     fn name(&self) -> &'static str {
         match self {
             Item::Badge(badge) => badge.name,
             Item::Booster(booster) => booster.name,
+            Item::Cosmetic(cosmetic) => cosmetic.name,
         }
     }
 }
@@ -71,16 +74,17 @@ async fn purchasable_names<'a>(
 ) -> impl Iterator<Item = String> + 'a {
     let names = badges::purchasable()
         .map(|badge| badge.name.to_string())
-        .chain(boosters::catalogue().map(|booster| booster.name.to_string()));
+        .chain(boosters::catalogue().map(|booster| booster.name.to_string()))
+        .chain(cosmetics::purchasable().map(|cosmetic| cosmetic.name.to_string()));
 
     names.filter(move |name| name.to_lowercase().contains(&partial.to_lowercase()))
 }
 
-/// Buy a badge or an XP booster with your coins
+/// Buy a badge, an XP booster or a cosmetic with your coins
 #[poise::command(slash_command)]
 pub async fn buy(
     ctx: Context<'_>,
-    #[description = "Which badge or booster to buy"]
+    #[description = "Which badge, booster or cosmetic to buy"]
     #[autocomplete = "purchasable_names"]
     item: String,
 ) -> Result<(), AppError> {
@@ -127,6 +131,20 @@ pub async fn buy(
                 spell_hours(booster.hours)
             ),
         ),
+        Item::Cosmetic(cosmetic) => {
+            let Some(price) = cosmetic.price else {
+                return Err(AppError::Message(format!(
+                    "**{}** isn't for sale.",
+                    cosmetic.name
+                )));
+            };
+
+            (
+                store::buy_cosmetic(db, user_id, cosmetic.id, price).await?,
+                price,
+                format!("Wear it with `/cosmetics equip {}`.", cosmetic.name),
+            )
+        }
     };
 
     let name = found.name();

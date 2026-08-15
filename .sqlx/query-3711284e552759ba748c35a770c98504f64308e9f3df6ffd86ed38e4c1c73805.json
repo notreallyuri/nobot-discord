@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profile (user_id, card_effect) VALUES ($1, $2)\n               ON CONFLICT (user_id) DO UPDATE\n               SET card_effect = $2, updated_at = now()\n               WHERE profile.card_effect IS DISTINCT FROM $2\n               RETURNING 1 AS \"changed!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "changed!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3711284e552759ba748c35a770c98504f64308e9f3df6ffd86ed38e4c1c73805"
+}

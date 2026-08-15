@@ -9,6 +9,7 @@ use std::sync::{Arc, OnceLock};
 
 pub mod accent;
 pub mod background;
+pub mod effect;
 pub mod emblem;
 pub mod levelup;
 pub mod profile;
@@ -334,6 +335,7 @@ mod render_tests {
             ],
             coins: 1_240,
             currency: "coins",
+            effect: None,
         });
 
         let cards = [
@@ -409,6 +411,7 @@ mod background_render_tests {
             badges: &[],
             coins: 0,
             currency: "coins",
+            effect: None,
         });
 
         let pixmap =
@@ -589,6 +592,7 @@ mod timing {
                 badges: &[],
                 coins: 1_240,
                 currency: "coins",
+                effect: None,
             })
         };
 

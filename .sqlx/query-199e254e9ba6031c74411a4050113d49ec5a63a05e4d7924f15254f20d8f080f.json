@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profile (user_id, accent_cosmetic) VALUES ($1, $2)\n               ON CONFLICT (user_id) DO UPDATE\n               SET accent_cosmetic = $2, updated_at = now()\n               WHERE profile.accent_cosmetic IS DISTINCT FROM $2\n               RETURNING 1 AS \"changed!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "changed!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "199e254e9ba6031c74411a4050113d49ec5a63a05e4d7924f15254f20d8f080f"
+}

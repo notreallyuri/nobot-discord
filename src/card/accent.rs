@@ -76,6 +76,17 @@ impl Accent {
         }
     }
 
+    pub fn pair(base: Rgb, light: Rgb) -> Self {
+        let (base, base_lifted) = ensure_legible(base);
+        let (light, light_lifted) = ensure_legible(light);
+
+        Self {
+            base: base.to_hex(),
+            light: light.to_hex(),
+            adjusted: base_lifted || light_lifted,
+        }
+    }
+
     pub fn from_stored(colour: Option<i32>) -> Self {
         Self::new(colour.map_or(DEFAULT, Rgb::from_i32))
     }
@@ -196,6 +207,24 @@ mod tests {
         let base = parse(&accent.base).expect("valid");
         let light = parse(&accent.light).expect("valid");
         assert!(light.luminance() > base.luminance());
+    }
+
+    #[test]
+    fn a_pair_keeps_both_stops_it_was_given() {
+        let accent = Accent::pair(Rgb(0x22, 0xd3, 0xee), Rgb(0xa7, 0x8b, 0xfa));
+
+        assert_eq!(accent.base, "#22d3ee");
+        assert_eq!(accent.light, "#a78bfa");
+        assert!(!accent.adjusted);
+    }
+
+    #[test]
+    fn a_pair_lifts_whichever_stop_is_too_dark() {
+        let accent = Accent::pair(Rgb(0, 0, 0), Rgb(0xa7, 0x8b, 0xfa));
+
+        assert!(accent.adjusted);
+        assert_ne!(accent.base, "#000000");
+        assert_eq!(accent.light, "#a78bfa", "the legible stop is left alone");
     }
 
     #[test]

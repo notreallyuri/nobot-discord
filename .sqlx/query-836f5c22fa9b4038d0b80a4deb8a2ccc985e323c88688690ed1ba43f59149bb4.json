@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT accent, accent_cosmetic FROM profile WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "accent",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "accent"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "accent_cosmetic",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "accent_cosmetic"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "836f5c22fa9b4038d0b80a4deb8a2ccc985e323c88688690ed1ba43f59149bb4"
+}

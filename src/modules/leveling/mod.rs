@@ -12,6 +12,7 @@ pub mod backfill;
 pub mod badges;
 pub mod boosters;
 pub mod commands;
+pub mod cosmetics;
 pub mod setup;
 pub mod store;
 pub mod storefront;
@@ -30,6 +31,7 @@ impl Module for LevelingModule {
             commands::background(),
             commands::color(),
             commands::badges(),
+            commands::cosmetics(),
             commands::shop(),
             commands::achievements(),
             commands::config(),
@@ -143,9 +145,9 @@ async fn announce_level_up(
         None => None,
     };
 
-    let accent = card::accent::Accent::from_stored(
-        store::accent(&data.db, msg.author.id.get() as i64).await?,
-    );
+    let accent = store::accent(&data.db, msg.author.id.get() as i64)
+        .await?
+        .resolve();
 
     let svg = card::levelup::svg(&card::levelup::LevelUp {
         name: msg.author.display_name(),

@@ -1,4 +1,4 @@
-use super::achievements;
+use super::{achievements, cosmetics};
 use crate::{data::MemberId, error::AppError};
 use sqlx::{PgConnection, PgPool};
 
@@ -80,6 +80,7 @@ pub struct ActiveBooster {
 pub struct Purse {
     pub balance: i64,
     pub owned: Vec<String>,
+    pub cosmetics: Vec<String>,
     pub boost: Option<ActiveBooster>,
 }
 
@@ -95,6 +96,7 @@ pub async fn purse(db: &PgPool, user_id: i64) -> Result<Purse, AppError> {
            SELECT
                COALESCE((SELECT coins FROM profile WHERE user_id = $1), 0) AS "balance!",
                ARRAY(SELECT badge_id FROM user_badge WHERE user_id = $1) AS "owned!",
+               ARRAY(SELECT cosmetic_id FROM user_cosmetic WHERE user_id = $1) AS "cosmetics!",
                (SELECT multiplier_pct::bigint FROM live) AS boost_pct,
                (SELECT expires_at FROM live) AS boost_until"#,
         user_id,
@@ -105,6 +107,7 @@ pub async fn purse(db: &PgPool, user_id: i64) -> Result<Purse, AppError> {
     Ok(Purse {
         balance: row.balance,
         owned: row.owned,
+        cosmetics: row.cosmetics,
         boost: row.boost_pct.map(|multiplier_pct| ActiveBooster {
             multiplier_pct,
             expires_at: row.boost_until,
@@ -203,6 +206,8 @@ pub struct ProfilePage {
     pub global: RankInfo,
     pub coins: i64,
     pub accent: Option<i32>,
+    pub accent_cosmetic: Option<String>,
+    pub card_effect: Option<String>,
     pub background: Option<Vec<u8>>,
     pub background_blur: Option<Vec<u8>>,
     pub badges: Vec<String>,
@@ -227,6 +232,8 @@ pub async fn profile_page(db: &PgPool, key: MemberId) -> Result<ProfilePage, App
                (SELECT COUNT(*) + 1 FROM users WHERE experience > global.xp) AS "global_rank!",
                p.coins,
                p.accent,
+               p.accent_cosmetic,
+               p.card_effect,
                p.background,
                p.background_blur,
                ARRAY(
@@ -252,18 +259,38 @@ pub async fn profile_page(db: &PgPool, key: MemberId) -> Result<ProfilePage, App
         },
         coins: row.coins.unwrap_or(0),
         accent: row.accent,
+        accent_cosmetic: row.accent_cosmetic,
+        card_effect: row.card_effect,
         background: row.background,
         background_blur: row.background_blur,
         badges: row.badges,
     })
 }
 
-pub async fn accent(db: &PgPool, user_id: i64) -> Result<Option<i32>, AppError> {
-    let accent = sqlx::query_scalar!("SELECT accent FROM profile WHERE user_id = $1", user_id)
-        .fetch_optional(db)
-        .await?;
+#[derive(Debug, Default)]
+pub struct AccentChoice {
+    pub colour: Option<i32>,
+    pub cosmetic: Option<String>,
+}
 
-    Ok(accent.flatten())
+impl AccentChoice {
+    pub fn resolve(&self) -> crate::card::accent::Accent {
+        cosmetics::accent(self.cosmetic.as_deref(), self.colour)
+    }
+}
+
+pub async fn accent(db: &PgPool, user_id: i64) -> Result<AccentChoice, AppError> {
+    let row = sqlx::query!(
+        "SELECT accent, accent_cosmetic FROM profile WHERE user_id = $1",
+        user_id
+    )
+    .fetch_optional(db)
+    .await?;
+
+    Ok(row.map_or_else(AccentChoice::default, |row| AccentChoice {
+        colour: row.accent,
+        cosmetic: row.accent_cosmetic,
+    }))
 }
 
 pub async fn set_background(
@@ -292,7 +319,7 @@ pub async fn set_accent(db: &PgPool, user_id: i64, accent: i32) -> Result<(), Ap
         "INSERT INTO profile (user_id, accent)
          VALUES ($1, $2)
          ON CONFLICT (user_id)
-         DO UPDATE SET accent = $2, updated_at = now()",
+         DO UPDATE SET accent = $2, accent_cosmetic = NULL, updated_at = now()",
         user_id,
         accent,
     )
@@ -316,8 +343,8 @@ pub async fn clear_background(db: &PgPool, user_id: i64) -> Result<bool, AppErro
 
 pub async fn clear_accent(db: &PgPool, user_id: i64) -> Result<bool, AppError> {
     let result = sqlx::query!(
-        "UPDATE profile SET accent = NULL, updated_at = now()
-         WHERE user_id = $1 AND accent IS NOT NULL",
+        "UPDATE profile SET accent = NULL, accent_cosmetic = NULL, updated_at = now()
+         WHERE user_id = $1 AND (accent IS NOT NULL OR accent_cosmetic IS NOT NULL)",
         user_id
     )
     .execute(db)
@@ -358,6 +385,189 @@ pub async fn owned_badges(db: &PgPool, user_id: i64) -> Result<Vec<OwnedBadge>, 
     .await?;
 
     Ok(rows)
+}
+
+#[derive(Debug)]
+pub struct OwnedCosmetic {
+    pub cosmetic_id: String,
+    pub equipped: bool,
+}
+
+pub async fn owned_cosmetics(db: &PgPool, user_id: i64) -> Result<Vec<OwnedCosmetic>, AppError> {
+    let rows = sqlx::query_as!(
+        OwnedCosmetic,
+        r#"SELECT
+               c.cosmetic_id AS "cosmetic_id!",
+               (COALESCE(c.cosmetic_id = p.accent_cosmetic, false)
+                OR COALESCE(c.cosmetic_id = p.card_effect, false)) AS "equipped!"
+             FROM user_cosmetic c
+             LEFT JOIN profile p ON p.user_id = c.user_id
+            WHERE c.user_id = $1
+            ORDER BY c.acquired_at"#,
+        user_id
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows)
+}
+
+pub async fn buy_cosmetic(
+    db: &PgPool,
+    user_id: i64,
+    cosmetic_id: &str,
+    price: i64,
+) -> Result<Purchase, AppError> {
+    let mut tx = db.begin().await?;
+
+    let coins = sqlx::query_scalar!(
+        "SELECT coins FROM profile WHERE user_id = $1 FOR UPDATE",
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or(0);
+
+    let owned = sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM user_cosmetic WHERE user_id = $1 AND cosmetic_id = $2)",
+        user_id,
+        cosmetic_id,
+    )
+    .fetch_one(&mut *tx)
+    .await?
+    .unwrap_or(false);
+
+    if owned {
+        return Ok(Purchase::AlreadyOwned);
+    }
+
+    if coins < price {
+        return Ok(Purchase::TooPoor {
+            balance: coins,
+            price,
+        });
+    }
+
+    let balance = sqlx::query_scalar!(
+        "UPDATE profile SET coins = coins - $2, updated_at = now()
+         WHERE user_id = $1 RETURNING coins",
+        user_id,
+        price,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query!(
+        "INSERT INTO user_cosmetic (user_id, cosmetic_id) VALUES ($1, $2)",
+        user_id,
+        cosmetic_id,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(Purchase::Bought { balance })
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Worn {
+    Changed,
+    NoChange,
+    NotOwned,
+}
+
+pub async fn equip_cosmetic(
+    db: &PgPool,
+    user_id: i64,
+    slot: cosmetics::Slot,
+    cosmetic_id: &str,
+) -> Result<Worn, AppError> {
+    let mut tx = db.begin().await?;
+
+    let owned = sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM user_cosmetic WHERE user_id = $1 AND cosmetic_id = $2)",
+        user_id,
+        cosmetic_id,
+    )
+    .fetch_one(&mut *tx)
+    .await?
+    .unwrap_or(false);
+
+    if !owned {
+        return Ok(Worn::NotOwned);
+    }
+
+    let changed = match slot {
+        cosmetics::Slot::Accent => {
+            sqlx::query_scalar!(
+                r#"INSERT INTO profile (user_id, accent_cosmetic) VALUES ($1, $2)
+               ON CONFLICT (user_id) DO UPDATE
+               SET accent_cosmetic = $2, updated_at = now()
+               WHERE profile.accent_cosmetic IS DISTINCT FROM $2
+               RETURNING 1 AS "changed!""#,
+                user_id,
+                cosmetic_id,
+            )
+            .fetch_optional(&mut *tx)
+            .await?
+        }
+        cosmetics::Slot::CardEffect => {
+            sqlx::query_scalar!(
+                r#"INSERT INTO profile (user_id, card_effect) VALUES ($1, $2)
+               ON CONFLICT (user_id) DO UPDATE
+               SET card_effect = $2, updated_at = now()
+               WHERE profile.card_effect IS DISTINCT FROM $2
+               RETURNING 1 AS "changed!""#,
+                user_id,
+                cosmetic_id,
+            )
+            .fetch_optional(&mut *tx)
+            .await?
+        }
+    };
+
+    tx.commit().await?;
+
+    Ok(match changed {
+        Some(_) => Worn::Changed,
+        None => Worn::NoChange,
+    })
+}
+
+pub async fn unequip_cosmetic(
+    db: &PgPool,
+    user_id: i64,
+    slot: cosmetics::Slot,
+    cosmetic_id: &str,
+) -> Result<Worn, AppError> {
+    let cleared = match slot {
+        cosmetics::Slot::Accent => {
+            sqlx::query!(
+                "UPDATE profile SET accent_cosmetic = NULL, updated_at = now()
+             WHERE user_id = $1 AND accent_cosmetic = $2",
+                user_id,
+                cosmetic_id,
+            )
+            .execute(db)
+            .await?
+        }
+        cosmetics::Slot::CardEffect => {
+            sqlx::query!(
+                "UPDATE profile SET card_effect = NULL, updated_at = now()
+             WHERE user_id = $1 AND card_effect = $2",
+                user_id,
+                cosmetic_id,
+            )
+            .execute(db)
+            .await?
+        }
+    };
+
+    Ok(match cleared.rows_affected() > 0 {
+        true => Worn::Changed,
+        false => Worn::NoChange,
+    })
 }
 
 pub async fn buy_badge(

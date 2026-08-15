@@ -133,11 +133,10 @@ async fn render_card(
         None => None,
     };
 
-    let stored = crate::modules::leveling::store::accent(&data.db, user.id.get() as i64)
+    let accent = crate::modules::leveling::store::accent(&data.db, user.id.get() as i64)
         .await
-        .unwrap_or_default();
-
-    let accent = card::accent::Accent::from_stored(stored);
+        .unwrap_or_default()
+        .resolve();
 
     let svg = card::welcome::svg(&card::welcome::Welcome {
         name: user.display_name(),

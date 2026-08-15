@@ -1,9 +1,8 @@
 use crate::{
-    Context, HttpKey,
-    card::{self, accent::Accent},
+    Context, HttpKey, card,
     data::MemberId,
     error::AppError,
-    modules::leveling::{badges, setup::xp, store},
+    modules::leveling::{badges, cosmetics, setup::xp, store},
 };
 use poise::serenity_prelude as serenity;
 
@@ -44,7 +43,7 @@ pub async fn profile(
         card::background::uris_for_card(page.background, page.background_blur),
     );
 
-    let accent = Accent::from_stored(page.accent);
+    let accent = cosmetics::accent(page.accent_cosmetic.as_deref(), page.accent);
 
     if let Some(restored) = &images.restore
         && let Err(error) =
@@ -76,6 +75,7 @@ pub async fn profile(
         badges: &equipped,
         coins: page.coins,
         currency: settings.currency(),
+        effect: cosmetics::effect(page.card_effect.as_deref()),
     });
 
     let png = card::render_async(

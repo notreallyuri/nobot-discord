@@ -336,6 +336,7 @@ mod preview {
             badges: &emblems,
             coins: 17_700,
             currency: "coins",
+            effect: None,
         });
 
         let png =

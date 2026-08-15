@@ -1,4 +1,4 @@
-use super::{badges, boosters, store};
+use super::{badges, boosters, cosmetics, store};
 use crate::{
     card::{
         self,
@@ -19,6 +19,7 @@ static SHELVES: OnceLock<Vec<(String, Vec<u8>)>> = OnceLock::new();
 pub enum Aisle {
     Badges,
     Boosters,
+    Cosmetics,
 }
 
 impl Aisle {
@@ -26,6 +27,7 @@ impl Aisle {
         match self {
             Aisle::Badges => "badges",
             Aisle::Boosters => "boosters",
+            Aisle::Cosmetics => "cosmetics",
         }
     }
 
@@ -33,6 +35,7 @@ impl Aisle {
         match self {
             Aisle::Badges => "Badges",
             Aisle::Boosters => "XP boosters",
+            Aisle::Cosmetics => "Cosmetics",
         }
     }
 
@@ -40,6 +43,7 @@ impl Aisle {
         match self {
             Aisle::Badges => "Worn on your profile card. Bought once.",
             Aisle::Boosters => "Multiply the XP you earn. Spent as they run.",
+            Aisle::Cosmetics => "Decorate your profile changing cards, gradient accents and more!",
         }
     }
 
@@ -47,6 +51,7 @@ impl Aisle {
         match slug {
             "badges" => Some(Aisle::Badges),
             "boosters" => Some(Aisle::Boosters),
+            "cosmetics" => Some(Aisle::Cosmetics),
             _ => None,
         }
     }
@@ -55,10 +60,11 @@ impl Aisle {
         match self {
             Aisle::Badges => badges::purchasable().count(),
             Aisle::Boosters => boosters::catalogue().count(),
+            Aisle::Cosmetics => cosmetics::purchasable().count(),
         }
     }
 
-    pub const ALL: [Aisle; 2] = [Aisle::Badges, Aisle::Boosters];
+    pub const ALL: [Aisle; 3] = [Aisle::Badges, Aisle::Boosters, Aisle::Cosmetics];
 }
 
 pub fn page_id(aisle: Aisle, page: usize) -> String {
@@ -154,6 +160,20 @@ pub fn embed(
                 )
             })
             .collect(),
+        Aisle::Cosmetics => cosmetics::purchasable()
+            .skip(skip)
+            .take(PAGE_SIZE)
+            .map(|cosmetic| {
+                let price = cosmetic.price.expect("purchasable");
+                let status = if wallet.cosmetics.iter().any(|id| id == cosmetic.id) {
+                    "owned".to_string()
+                } else {
+                    afford(price, wallet.balance, currency)
+                };
+
+                format!("**{}** — {status}\n{}", cosmetic.name, cosmetic.description)
+            })
+            .collect(),
     };
 
     let mut footer = format!("{} {currency}", wallet.balance);
@@ -201,6 +221,15 @@ fn cells_for(aisle: Aisle) -> Vec<Cell<'static>> {
                     colour: booster.colour,
                 },
                 label: booster.name,
+            })
+            .collect(),
+        Aisle::Cosmetics => cosmetics::purchasable()
+            .map(|cosmetic| Cell {
+                emblem: Emblem {
+                    icon: cosmetic.icon,
+                    colour: cosmetic.colour,
+                },
+                label: cosmetic.name,
             })
             .collect(),
     }
@@ -411,6 +440,9 @@ mod tests {
                     match aisle {
                         Aisle::Badges => badges::purchasable().skip(skip).take(PAGE_SIZE).count(),
                         Aisle::Boosters => boosters::catalogue().skip(skip).take(PAGE_SIZE).count(),
+                        Aisle::Cosmetics => {
+                            cosmetics::purchasable().skip(skip).take(PAGE_SIZE).count()
+                        }
                     }
                 })
                 .sum();
@@ -424,6 +456,7 @@ mod tests {
         let wallet = Wallet {
             balance: 0,
             owned: Vec::new(),
+            cosmetics: Vec::new(),
             boost: None,
         };
 
@@ -433,6 +466,40 @@ mod tests {
         assert!(
             rendered.contains("Paragon"),
             "the last page should be shown"
+        );
+    }
+
+    #[test]
+    fn an_aisle_reads_ownership_from_its_own_list() {
+        let first = cosmetics::purchasable().next().expect("a cosmetic");
+        let wallet = Wallet {
+            balance: 100_000,
+            owned: vec![first.id.to_string()],
+            cosmetics: Vec::new(),
+            boost: None,
+        };
+
+        let shown = format!(
+            "{:?}",
+            embed(Aisle::Cosmetics, 0, &wallet, "coins", "attachment://x.png")
+        );
+        assert!(
+            !shown.contains("owned"),
+            "a badge id marked a cosmetic as owned"
+        );
+
+        let wallet = Wallet {
+            cosmetics: vec![first.id.to_string()],
+            owned: Vec::new(),
+            ..wallet
+        };
+        let shown = format!(
+            "{:?}",
+            embed(Aisle::Cosmetics, 0, &wallet, "coins", "attachment://x.png")
+        );
+        assert!(
+            shown.contains("owned"),
+            "an owned cosmetic is still on sale"
         );
     }
 

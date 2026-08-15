@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE profile SET accent_cosmetic = NULL, updated_at = now()\n             WHERE user_id = $1 AND accent_cosmetic = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9c6e2a4b3e3f25cdb80335cd9cdd885bbb11fc26268bfb7b116526ac5ca63d1"
+}

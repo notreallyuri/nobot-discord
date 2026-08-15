@@ -153,7 +153,7 @@ mod tests {
 #[cfg(test)]
 mod preview {
     use super::*;
-    use crate::modules::leveling::{badges, boosters};
+    use crate::modules::leveling::{badges, boosters, cosmetics};
 
     #[test]
     #[ignore = "diagnostic: render a shop shelf"]
@@ -180,7 +180,21 @@ mod preview {
             })
             .collect();
 
-        for (name, cells) in [("badges", badge_cells), ("boosters", boost_cells)] {
+        let cosmetic_cells: Vec<Cell<'_>> = cosmetics::purchasable()
+            .map(|cosmetic| Cell {
+                emblem: Emblem {
+                    icon: cosmetic.icon,
+                    colour: cosmetic.colour,
+                },
+                label: cosmetic.name,
+            })
+            .collect();
+
+        for (name, cells) in [
+            ("badges", badge_cells),
+            ("boosters", boost_cells),
+            ("cosmetics", cosmetic_cells),
+        ] {
             let (width, height) = size(cells.len());
             let png = super::super::render(&svg(&cells), width, height, super::super::SUPERSAMPLE)
                 .expect("render");
