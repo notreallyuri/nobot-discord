@@ -13,9 +13,6 @@ use std::sync::OnceLock;
 pub const PREFIX: &str = "shop:";
 const PAGE_SIZE: usize = 6;
 
-/// One shelf per aisle, rendered once for the life of the process. The catalogue
-/// is static, so these never change, and holding the image steady across a page
-/// turn is what lets a press avoid touching attachments at all.
 static SHELVES: OnceLock<Vec<(String, Vec<u8>)>> = OnceLock::new();
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -70,10 +67,6 @@ pub fn page_id(aisle: Aisle, page: usize) -> String {
 
 pub const SELECT_ID: &str = "shop:aisle";
 
-/// Where a press wants to go. The whole position lives in the id, so a shop
-/// posted before a restart still works afterwards.
-/// Where a press wants to go. A pick carries its aisle in the chosen value
-/// rather than the id, so the picker keeps one id however many aisles there are.
 pub enum Move {
     Page(Aisle, usize),
     Pick,

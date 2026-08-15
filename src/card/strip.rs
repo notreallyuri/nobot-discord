@@ -9,8 +9,6 @@ const LABEL_SIZE: f64 = 12.0;
 const LABEL_BUDGET: usize = 13;
 
 const INK: &str = "#c8d0e2";
-/// Discord embeds sit on a light ground in light mode, so the strip carries its
-/// own dark panel rather than relying on the theme behind it.
 const GROUND: &str = "#1a1d27";
 
 pub struct Cell<'a> {
