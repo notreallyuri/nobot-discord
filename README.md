@@ -1,4 +1,4 @@
-# dis-ru
+# nobot-discord
 
 A Discord bot in Rust: music playback, a leveling economy, and image-generated
 profile cards. One process, one Postgres database, 46 slash commands.
